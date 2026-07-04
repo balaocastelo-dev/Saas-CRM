@@ -39,6 +39,27 @@ interface SendTextMessageParams {
   previewUrl?: boolean
 }
 
+interface UploadMediaParams {
+  file: File | Blob
+  fileName: string
+  mimeType: string
+}
+
+interface SendMediaMessageParams {
+  to: string
+  mediaType: 'image' | 'audio'
+  mediaId: string
+  caption?: string
+}
+
+type WhatsAppMediaInfo = {
+  url: string
+  mime_type?: string
+  sha256?: string
+  file_size?: number
+  id: string
+}
+
 export interface WhatsAppApiResponse {
   messaging_product: string
   contacts: Array<{ input: string; wa_id: string }>
@@ -53,6 +74,12 @@ export interface WhatsAppErrorResponse {
     error_subcode?: number
     fbtrace_id: string
   }
+}
+
+export interface DownloadedWhatsAppMedia {
+  body: ReadableStream<Uint8Array> | null
+  mimeType: string
+  fileName: string | null
 }
 
 /**
@@ -178,6 +205,192 @@ export async function sendTextMessage({
   }
 }
 
+export async function uploadMedia({
+  file,
+  fileName,
+  mimeType,
+}: UploadMediaParams): Promise<{ success: boolean; data?: { id: string }; error?: string }> {
+  const accessToken = getAccessToken()
+  const phoneNumberId = getPhoneNumberId()
+
+  if (!accessToken || !phoneNumberId) {
+    return { success: false, error: 'WhatsApp não configurado. Configure o token e o ID do número nas configurações.' }
+  }
+
+  try {
+    const formData = new FormData()
+    const uploadFile =
+      file instanceof File
+        ? file
+        : new File([file], fileName, {
+            type: mimeType || 'application/octet-stream',
+          })
+
+    formData.set('messaging_product', 'whatsapp')
+    formData.set('file', uploadFile, fileName)
+
+    const response = await fetch(`${WHATSAPP_API_URL}/${phoneNumberId}/media`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: formData,
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      const errorData = data as WhatsAppErrorResponse
+      return {
+        success: false,
+        error: errorData.error?.message || 'Erro ao enviar mídia para a Meta.',
+      }
+    }
+
+    return { success: true, data: data as { id: string } }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao enviar mídia',
+    }
+  }
+}
+
+export async function sendMediaMessage({
+  to,
+  mediaType,
+  mediaId,
+  caption,
+}: SendMediaMessageParams): Promise<{ success: boolean; data?: WhatsAppApiResponse; error?: string }> {
+  const accessToken = getAccessToken()
+  const phoneNumberId = getPhoneNumberId()
+  const recipient = normalizeWhatsAppPhone(to)
+
+  if (!accessToken || !phoneNumberId) {
+    return { success: false, error: 'WhatsApp não configurado. Configure o token e o ID do número nas configurações.' }
+  }
+
+  if (!recipient) {
+    return { success: false, error: 'Telefone do destinatário inválido.' }
+  }
+
+  try {
+    const payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: recipient,
+      type: mediaType,
+      [mediaType]: {
+        id: mediaId,
+        ...(mediaType === 'image' && caption?.trim() ? { caption: caption.trim() } : {}),
+      },
+    }
+
+    const response = await fetch(`${WHATSAPP_API_URL}/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      const errorData = data as WhatsAppErrorResponse
+      return {
+        success: false,
+        error: errorData.error?.message || 'Erro desconhecido da API WhatsApp',
+      }
+    }
+
+    return { success: true, data: data as WhatsAppApiResponse }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao enviar mídia',
+    }
+  }
+}
+
+export async function getMediaInfo(mediaId: string): Promise<{ success: boolean; data?: WhatsAppMediaInfo; error?: string }> {
+  const accessToken = getAccessToken()
+
+  if (!accessToken) {
+    return { success: false, error: 'WhatsApp não configurado.' }
+  }
+
+  try {
+    const response = await fetch(`${WHATSAPP_API_URL}/${mediaId}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      cache: 'no-store',
+    })
+    const data = await response.json()
+
+    if (!response.ok) {
+      const errorData = data as WhatsAppErrorResponse
+      return {
+        success: false,
+        error: errorData.error?.message || 'Erro ao consultar mídia na Meta.',
+      }
+    }
+
+    return { success: true, data: data as WhatsAppMediaInfo }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao consultar mídia',
+    }
+  }
+}
+
+export async function downloadMedia(mediaId: string): Promise<{ success: boolean; data?: DownloadedWhatsAppMedia; error?: string }> {
+  const accessToken = getAccessToken()
+  if (!accessToken) {
+    return { success: false, error: 'WhatsApp não configurado.' }
+  }
+
+  const mediaInfo = await getMediaInfo(mediaId)
+  if (!mediaInfo.success || !mediaInfo.data) {
+    return { success: false, error: mediaInfo.error || 'Não foi possível localizar a mídia.' }
+  }
+
+  try {
+    const response = await fetch(mediaInfo.data.url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: 'Não foi possível baixar a mídia na Meta.',
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        body: response.body,
+        mimeType: mediaInfo.data.mime_type || response.headers.get('content-type') || 'application/octet-stream',
+        fileName: response.headers
+          .get('content-disposition')
+          ?.match(/filename="?([^"]+)"?/)?.[1] || null,
+      },
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao baixar mídia',
+    }
+  }
+}
+
 /**
  * Marca uma mensagem como lida
  */
@@ -262,6 +475,10 @@ export interface WebhookMessage {
   type: string
   text?: { body: string }
   template?: Record<string, unknown>
+  image?: { id: string; mime_type?: string; caption?: string }
+  audio?: { id: string; mime_type?: string; voice?: boolean }
+  document?: { id: string; mime_type?: string; filename?: string; caption?: string }
+  video?: { id: string; mime_type?: string; caption?: string }
 }
 
 export interface WebhookStatusUpdate {

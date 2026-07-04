@@ -2,11 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { normalizeWhatsAppPhone } from '@/lib/utils'
-import { sendTextMessage } from '@/lib/whatsapp/client'
+import { sendMediaMessage, sendTextMessage, uploadMedia } from '@/lib/whatsapp/client'
+import { serializeWhatsAppMediaContent } from '@/lib/whatsapp/message-content'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 const sendMessageSchema = z.object({
   conversationId: z.string().uuid(),
   text: z.string().trim().min(1).max(4096),
+})
+
+const sendMediaSchema = z.object({
+  conversationId: z.string().uuid(),
+  text: z.string().trim().max(1024).optional().default(''),
 })
 
 export async function POST(request: NextRequest) {
@@ -20,8 +29,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 })
     }
 
-    const body = await request.json()
-    const { conversationId, text } = sendMessageSchema.parse(body)
+    const contentType = request.headers.get('content-type') || ''
+    const isMultipart = contentType.includes('multipart/form-data')
+
+    let conversationId = ''
+    let text = ''
+    let mediaFile: File | null = null
+
+    if (isMultipart) {
+      const formData = await request.formData()
+      const parsed = sendMediaSchema.parse({
+        conversationId: formData.get('conversationId'),
+        text: formData.get('text'),
+      })
+
+      conversationId = parsed.conversationId
+      text = parsed.text
+      const uploadedFile = formData.get('media')
+      mediaFile = uploadedFile instanceof File ? uploadedFile : null
+
+      if (!mediaFile) {
+        return NextResponse.json({ error: 'Selecione uma foto ou um áudio para enviar.' }, { status: 400 })
+      }
+    } else {
+      const body = await request.json()
+      const parsed = sendMessageSchema.parse(body)
+      conversationId = parsed.conversationId
+      text = parsed.text
+    }
 
     const { data: conversation, error: conversationError } = await supabase
       .from('whatsapp_conversations')
@@ -57,10 +92,62 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Telefone do destinatário inválido.' }, { status: 400 })
     }
 
-    const result = await sendTextMessage({
-      to: recipient,
-      text,
-    })
+    let result: { success: boolean; data?: { messages?: Array<{ id: string; message_status: string }> }; error?: string }
+    let messageType: 'text' | 'image' | 'audio' = 'text'
+    let storedContent = text
+
+    if (mediaFile) {
+      const mimeType = mediaFile.type || 'application/octet-stream'
+      const isImage = mimeType.startsWith('image/')
+      const isAudio = mimeType.startsWith('audio/')
+
+      if (!isImage && !isAudio) {
+        return NextResponse.json(
+          { error: 'Envie apenas arquivos de imagem ou áudio no atendimento.' },
+          { status: 400 }
+        )
+      }
+
+      if (isAudio && text.trim()) {
+        return NextResponse.json(
+          { error: 'Áudio não suporta legenda. Envie o texto separado após o áudio.' },
+          { status: 400 }
+        )
+      }
+
+      const uploadResult = await uploadMedia({
+        file: mediaFile,
+        fileName: mediaFile.name || `arquivo-${Date.now()}`,
+        mimeType,
+      })
+
+      if (!uploadResult.success || !uploadResult.data?.id) {
+        return NextResponse.json(
+          { error: uploadResult.error || 'Falha ao enviar a mídia para a Meta.' },
+          { status: 400 }
+        )
+      }
+
+      messageType = isImage ? 'image' : 'audio'
+      storedContent = serializeWhatsAppMediaContent({
+        mediaId: uploadResult.data.id,
+        mimeType,
+        caption: isImage ? text : null,
+        fileName: mediaFile.name || null,
+      })
+
+      result = await sendMediaMessage({
+        to: recipient,
+        mediaType: messageType,
+        mediaId: uploadResult.data.id,
+        caption: isImage ? text : undefined,
+      })
+    } else {
+      result = await sendTextMessage({
+        to: recipient,
+        text,
+      })
+    }
 
     if (!result.success) {
       return NextResponse.json(
@@ -79,12 +166,12 @@ export async function POST(request: NextRequest) {
         conversation_id: conversation.id,
         wamid,
         direction: 'outbound',
-        message_type: 'text',
-        content: text,
+        message_type: messageType,
+        content: storedContent,
         status: sentStatus,
         sent_by: user.id,
       })
-      .select('id, content, direction, created_at, status, wamid')
+      .select('id, content, direction, created_at, status, wamid, message_type')
       .single()
 
     if (insertError) {

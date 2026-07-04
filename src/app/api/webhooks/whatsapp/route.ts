@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getWhatsAppPhoneCandidates, normalizeWhatsAppPhone } from '@/lib/utils'
 import type { WebhookMessage, WebhookStatusUpdate } from '@/lib/whatsapp/client'
+import { serializeWhatsAppMediaContent } from '@/lib/whatsapp/message-content'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -113,9 +114,9 @@ export async function POST(request: NextRequest) {
 async function processIncomingMessage(supabaseAdmin: SupabaseAdminClient, msg: WebhookMessage) {
   const phone = normalizeWhatsAppPhone(msg.from)
   const phoneCandidates = getWhatsAppPhoneCandidates(phone)
-  const content = extractInboundContent(msg)
-  const text = content.trim().toUpperCase()
   const messageType = normalizeInboundMessageType(msg.type)
+  const content = extractInboundContent(msg, messageType)
+  const text = (messageType === 'text' || messageType === 'interactive' ? content : '').trim().toUpperCase()
 
   console.log('[Webhook] Inbound recebido', {
     wamid: msg.id,
@@ -205,7 +206,7 @@ async function processIncomingMessage(supabaseAdmin: SupabaseAdminClient, msg: W
   })
 
   // Handle OPT-OUT
-  if (OPT_OUT_KEYWORDS.some(kw => text === kw)) {
+  if ((messageType === 'text' || messageType === 'interactive') && OPT_OUT_KEYWORDS.some(kw => text === kw)) {
     await supabaseAdmin
       .from('customers')
       .update({ accepted_marketing: false, status: 'opt-out' })
@@ -224,7 +225,7 @@ async function processIncomingMessage(supabaseAdmin: SupabaseAdminClient, msg: W
   }
 
   // Handle OPT-IN / QUERO — create opportunity
-  if (OPT_IN_KEYWORDS.some(kw => text === kw) && customer) {
+  if ((messageType === 'text' || messageType === 'interactive') && OPT_IN_KEYWORDS.some(kw => text === kw) && customer) {
     const { data: existingOpp } = await supabaseAdmin
       .from('opportunities')
       .select('id')
@@ -251,7 +252,7 @@ async function processIncomingMessage(supabaseAdmin: SupabaseAdminClient, msg: W
     .eq('key', 'ai_enabled')
     .maybeSingle()
 
-  if (aiSetting?.value === 'true' || aiSetting?.value === true) {
+  if ((aiSetting?.value === 'true' || aiSetting?.value === true) && (messageType === 'text' || messageType === 'interactive')) {
     const aiResponse = getAIResponse(content)
     if (aiResponse) {
       const { sendTextMessage } = await import('@/lib/whatsapp/client')
@@ -287,9 +288,42 @@ function normalizeInboundMessageType(messageType: string | undefined): Supported
   }
 }
 
-function extractInboundContent(msg: WebhookMessage): string {
+function extractInboundContent(msg: WebhookMessage, messageType: SupportedMessageType): string {
   if (msg.text?.body) {
     return msg.text.body
+  }
+
+  if (messageType === 'image' && msg.image?.id) {
+    return serializeWhatsAppMediaContent({
+      mediaId: msg.image.id,
+      mimeType: msg.image.mime_type || null,
+      caption: msg.image.caption || null,
+    })
+  }
+
+  if (messageType === 'audio' && msg.audio?.id) {
+    return serializeWhatsAppMediaContent({
+      mediaId: msg.audio.id,
+      mimeType: msg.audio.mime_type || null,
+      caption: msg.audio.voice ? 'Mensagem de voz' : null,
+    })
+  }
+
+  if (messageType === 'document' && msg.document?.id) {
+    return serializeWhatsAppMediaContent({
+      mediaId: msg.document.id,
+      mimeType: msg.document.mime_type || null,
+      caption: msg.document.caption || null,
+      fileName: msg.document.filename || null,
+    })
+  }
+
+  if (messageType === 'video' && msg.video?.id) {
+    return serializeWhatsAppMediaContent({
+      mediaId: msg.video.id,
+      mimeType: msg.video.mime_type || null,
+      caption: msg.video.caption || null,
+    })
   }
 
   const dynamicMessage = msg as WebhookMessage & {

@@ -13,7 +13,7 @@ type ConversationRow = {
   last_message_at: string | null
   customer?: { name: string; phone_normalized: string } | Array<{ name: string; phone_normalized: string }>
   assigned_to?: { id: string; full_name: string } | Array<{ id: string; full_name: string }>
-  messages?: Array<{ content: string; direction: string; created_at: string; status: string }>
+  messages?: Array<{ content: string; direction: string; created_at: string; status: string; message_type: string }>
   [key: string]: unknown
 }
 
@@ -25,7 +25,7 @@ type ConversationView = {
   last_message_at: string
   customer?: { name: string; phone_normalized: string }
   assigned_to?: { id: string; full_name: string }
-  messages: Array<{ content: string; direction: string; created_at: string; status: string }>
+  messages: Array<{ content: string; direction: string; created_at: string; status: string; message_type: string }>
 }
 
 type QuickReply = {
@@ -65,6 +65,7 @@ function mergeMessages(rows: ConversationRow[]) {
     .filter(message => {
       const key = [
         message.direction,
+        message.message_type,
         message.created_at,
         message.status,
         message.content || '',
@@ -154,7 +155,7 @@ export default async function AtendimentoPage() {
         *,
         customer:customers(name, phone_normalized),
         assigned_to:profiles!assigned_to(id, full_name),
-        messages:whatsapp_messages(content, direction, created_at, status)
+        messages:whatsapp_messages(content, direction, created_at, status, message_type)
       `)
       .order('last_message_at', { ascending: false })
       .limit(200),

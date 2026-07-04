@@ -1,21 +1,26 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import Image from 'next/image'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Check,
   CheckCheck,
   Clock,
+  ImageIcon,
   Loader2,
   MessageSquare,
+  Paperclip,
   Plus,
   Search,
   Send,
   Sparkles,
   User,
+  Volume2,
   X,
 } from 'lucide-react'
 import { formatPhone, normalizeWhatsAppPhone } from '@/lib/utils'
+import { getWhatsAppMessagePreview, parseWhatsAppMediaContent } from '@/lib/whatsapp/message-content'
 
 interface Conversation {
   id: string
@@ -25,7 +30,15 @@ interface Conversation {
   last_message_at: string
   customer?: { name: string; phone_normalized: string }
   assigned_to?: { id?: string; full_name: string }
-  messages?: Array<{ content: string; direction: string; created_at: string; status: string }>
+  messages?: Array<{ content: string; direction: string; created_at: string; status: string; message_type: string }>
+}
+
+interface ConversationMessage {
+  content: string
+  direction: string
+  created_at: string
+  status: string
+  message_type: string
 }
 
 interface QuickReply {
@@ -80,6 +93,55 @@ function getConversationPreview(conversation: Conversation) {
   return conversation.customer?.name || formatPhone(conversation.phone)
 }
 
+function getMediaUrl(mediaId: string) {
+  return `/api/atendimento/media/${mediaId}`
+}
+
+function renderMessageContent(message: ConversationMessage) {
+  if (message.message_type === 'image') {
+    const media = parseWhatsAppMediaContent(message.content)
+
+    if (!media?.mediaId) {
+      return <p>(imagem indisponível)</p>
+    }
+
+    return (
+      <div className="space-y-2">
+        <a href={getMediaUrl(media.mediaId)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg">
+          <Image
+            src={getMediaUrl(media.mediaId)}
+            alt={media.caption || 'Imagem do WhatsApp'}
+            width={320}
+            height={240}
+            className="h-auto max-w-full rounded-lg"
+            unoptimized
+          />
+        </a>
+        {media.caption && <p className="whitespace-pre-wrap break-words">{media.caption}</p>}
+      </div>
+    )
+  }
+
+  if (message.message_type === 'audio') {
+    const media = parseWhatsAppMediaContent(message.content)
+
+    if (!media?.mediaId) {
+      return <p>(áudio indisponível)</p>
+    }
+
+    return (
+      <div className="space-y-2">
+        <audio controls preload="none" className="max-w-full">
+          <source src={getMediaUrl(media.mediaId)} type={media.mimeType || 'audio/ogg'} />
+        </audio>
+        {media.caption && <p className="whitespace-pre-wrap break-words">{media.caption}</p>}
+      </div>
+    )
+  }
+
+  return <p className="whitespace-pre-wrap break-words">{message.content || '(mensagem de template)'}</p>
+}
+
 export default function AtendimentoClient({
   conversations,
   quickReplies,
@@ -90,6 +152,7 @@ export default function AtendimentoClient({
   const [conversationList, setConversationList] = useState(conversations)
   const [selectedId, setSelectedId] = useState<string | null>(conversations[0]?.id || null)
   const [message, setMessage] = useState('')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [search, setSearch] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
@@ -103,6 +166,7 @@ export default function AtendimentoClient({
   const [startingConversation, setStartingConversation] = useState(false)
   const [startError, setStartError] = useState('')
   const [startSuccess, setStartSuccess] = useState('')
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     setConversationList(conversations)
@@ -159,22 +223,37 @@ export default function AtendimentoClient({
   }
 
   async function handleSendMessage() {
-    if (!selected || !message.trim() || sending) return
+    if (!selected || ((!message.trim() && !selectedFile) || sending)) return
 
     setSending(true)
     setSendError('')
 
     try {
-      const response = await fetch('/api/atendimento/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conversationId: selected.id,
-          text: message.trim(),
-        }),
-      })
+      const trimmedMessage = message.trim()
+      let response: Response
+
+      if (selectedFile) {
+        const formData = new FormData()
+        formData.set('conversationId', selected.id)
+        formData.set('text', trimmedMessage)
+        formData.set('media', selectedFile)
+
+        response = await fetch('/api/atendimento/send', {
+          method: 'POST',
+          body: formData,
+        })
+      } else {
+        response = await fetch('/api/atendimento/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            conversationId: selected.id,
+            text: trimmedMessage,
+          }),
+        })
+      }
 
       const payload = await response.json()
 
@@ -187,6 +266,7 @@ export default function AtendimentoClient({
         direction: string
         created_at: string
         status: string
+        message_type: string
       }
 
       setConversationList(currentConversations =>
@@ -202,6 +282,10 @@ export default function AtendimentoClient({
         )
       )
       setMessage('')
+      setSelectedFile(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     } catch (error) {
       setSendError(error instanceof Error ? error.message : 'Erro ao enviar mensagem.')
     } finally {
@@ -328,6 +412,23 @@ export default function AtendimentoClient({
     setMessage(currentMessage =>
       currentMessage.trim() ? `${currentMessage.trim()}\n${content}` : content
     )
+  }
+
+  function handleSelectFile(file: File | null) {
+    setSelectedFile(file)
+    if (!file && fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+    if (file && !(file.type.startsWith('image/') || file.type.startsWith('audio/'))) {
+      setSendError('Selecione apenas arquivos de imagem ou áudio.')
+      setSelectedFile(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+      return
+    }
+
+    setSendError('')
   }
 
   return (
@@ -470,7 +571,7 @@ export default function AtendimentoClient({
                     {lastMessage && (
                       <p className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>
                         {lastMessage.direction === 'outbound' ? '→ ' : ''}
-                        {lastMessage.content || '(mensagem de template)'}
+                        {getWhatsAppMessagePreview(lastMessage.message_type, lastMessage.content)}
                       </p>
                     )}
                     <div className="mt-1 flex items-center gap-2">
@@ -554,7 +655,7 @@ export default function AtendimentoClient({
                 className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
                 <div>
                   <div className={msg.direction === 'outbound' ? 'chat-bubble-outbound' : 'chat-bubble-inbound'}>
-                    {msg.content || '(mensagem de template)'}
+                    {renderMessageContent(msg)}
                   </div>
                   <div className={`flex items-center gap-1 mt-0.5 ${msg.direction === 'outbound' ? 'justify-end' : ''}`}>
                     <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
@@ -594,11 +695,59 @@ export default function AtendimentoClient({
               </div>
             )}
 
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,audio/*"
+              className="hidden"
+              onChange={event => handleSelectFile(event.target.files?.[0] || null)}
+            />
+
+            {selectedFile && (
+              <div
+                className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2"
+                style={{ borderColor: 'var(--border-color)', background: 'var(--bg-card)' }}>
+                <div className="flex items-center gap-2 min-w-0">
+                  {selectedFile.type.startsWith('image/') ? (
+                    <ImageIcon size={16} style={{ color: 'var(--text-secondary)' }} />
+                  ) : (
+                    <Volume2 size={16} style={{ color: 'var(--text-secondary)' }} />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm text-white truncate">{selectedFile.name}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {selectedFile.type.startsWith('image/')
+                        ? 'Foto selecionada'
+                        : 'Áudio selecionado'}
+                      {selectedFile.type.startsWith('audio/') ? ' - envie o texto separado se quiser legenda.' : ''}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => handleSelectFile(null)}>
+                  <X size={15} />
+                </button>
+              </div>
+            )}
+
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="btn-secondary p-2.5"
+                disabled={sending}
+                onClick={() => fileInputRef.current?.click()}>
+                <Paperclip size={16} />
+              </button>
               <input
                 type="text"
                 className="input flex-1"
-                placeholder="Digite uma mensagem... (apenas dentro da janela de 24h)"
+                placeholder={
+                  selectedFile?.type.startsWith('image/')
+                    ? 'Digite a legenda da foto...'
+                    : 'Digite uma mensagem... (ou anexe foto/áudio)'
+                }
                 value={message}
                 onChange={event => setMessage(event.target.value)}
                 onKeyDown={event => {
@@ -610,7 +759,7 @@ export default function AtendimentoClient({
               />
               <button
                 className="btn-primary p-2.5"
-                disabled={!message.trim() || sending}
+                disabled={(!message.trim() && !selectedFile) || sending}
                 onClick={() => void handleSendMessage()}>
                 {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
               </button>
