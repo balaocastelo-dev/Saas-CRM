@@ -49,10 +49,21 @@ export async function POST(request: NextRequest) {
     const signature = request.headers.get('x-hub-signature-256') || ''
     const appSecret = process.env.WHATSAPP_APP_SECRET || ''
 
-    if (appSecret && signature) {
+    if (appSecret) {
+      if (!signature) {
+        console.error('[Webhook] Assinatura ausente', {
+          appSecretLength: appSecret.length,
+        })
+        return NextResponse.json({ error: 'Assinatura ausente' }, { status: 401 })
+      }
+
       const isValid = verifyWebhookSignature(body, signature, appSecret)
       if (!isValid) {
-        console.error('[Webhook] Assinatura inválida')
+        console.error('[Webhook] Assinatura inválida', {
+          signaturePrefix: signature.slice(0, 16),
+          signatureLength: signature.length,
+          appSecretLength: appSecret.length,
+        })
         return NextResponse.json({ error: 'Assinatura inválida' }, { status: 401 })
       }
     }
@@ -159,6 +170,15 @@ async function processIncomingMessage(supabaseAdmin: SupabaseAdminClient, msg: W
       .eq('id', conversation.id)
   }
 
+  console.log('[Webhook] Conversa inbound resolvida', {
+    wamid: msg.id,
+    phone,
+    customerId: customer?.id || null,
+    conversationId: conversation?.id || null,
+    conversationPhone: conversation?.phone || phone,
+    matchedExistingConversation: Boolean(conversationMatches?.[0]),
+  })
+
   // Save message
   const { error: messageInsertError } = await supabaseAdmin
     .from('whatsapp_messages')
@@ -177,6 +197,12 @@ async function processIncomingMessage(supabaseAdmin: SupabaseAdminClient, msg: W
   if (messageInsertError) {
     throw messageInsertError
   }
+
+  console.log('[Webhook] Mensagem inbound persistida', {
+    wamid: msg.id,
+    conversationId: conversation?.id || null,
+    messageType,
+  })
 
   // Handle OPT-OUT
   if (OPT_OUT_KEYWORDS.some(kw => text === kw)) {

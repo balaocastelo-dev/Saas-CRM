@@ -214,13 +214,20 @@ export function verifyWebhookSignature(
   appSecret: string
 ): boolean {
   try {
+    const normalizedSignature = signature.trim()
+    const normalizedAppSecret = appSecret.trim()
+
     const expectedSignature = `sha256=${crypto
-      .createHmac('sha256', appSecret)
+      .createHmac('sha256', normalizedAppSecret)
       .update(payload)
       .digest('hex')}`
 
+    if (Buffer.byteLength(normalizedSignature) !== Buffer.byteLength(expectedSignature)) {
+      return false
+    }
+
     return crypto.timingSafeEqual(
-      Buffer.from(signature),
+      Buffer.from(normalizedSignature),
       Buffer.from(expectedSignature)
     )
   } catch {
