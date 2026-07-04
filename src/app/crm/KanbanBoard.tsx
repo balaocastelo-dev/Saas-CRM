@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { formatCurrency, STAGE_LABELS } from '@/lib/utils'
 import { User, DollarSign } from 'lucide-react'
 
@@ -28,8 +29,43 @@ interface Opportunity {
 export default function KanbanBoard({ opportunities }: { opportunities: Opportunity[] }) {
   const [opps, setOpps] = useState(opportunities)
   const [dragging, setDragging] = useState<string | null>(null)
+  const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [error, setError] = useState('')
 
   const getByStage = (stage: string) => opps.filter(o => o.stage === stage)
+
+  async function handleStageChange(opportunityId: string, stage: string) {
+    const current = opps.find(o => o.id === opportunityId)
+    if (!current || current.stage === stage) {
+      return
+    }
+
+    const previousStage = current.stage
+    setError('')
+    setUpdatingId(opportunityId)
+    setOpps(prev => prev.map(o => (o.id === opportunityId ? { ...o, stage } : o)))
+
+    try {
+      const response = await fetch(`/api/crm/opportunities/${opportunityId}/stage`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ stage }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Não foi possível atualizar a etapa.')
+      }
+    } catch (err) {
+      setOpps(prev => prev.map(o => (o.id === opportunityId ? { ...o, stage: previousStage } : o)))
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar oportunidade.')
+    } finally {
+      setUpdatingId(null)
+      setDragging(null)
+    }
+  }
 
   return (
     <div className="flex gap-4 overflow-x-auto p-6 h-full">
@@ -43,8 +79,7 @@ export default function KanbanBoard({ opportunities }: { opportunities: Opportun
             onDrop={e => {
               e.preventDefault()
               if (!dragging) return
-              setOpps(prev => prev.map(o => o.id === dragging ? { ...o, stage: key } : o))
-              setDragging(null)
+              void handleStageChange(dragging, key)
             }}>
             {/* Column header */}
             <div className="flex items-center justify-between px-1 mb-1">
@@ -65,7 +100,8 @@ export default function KanbanBoard({ opportunities }: { opportunities: Opportun
               <div key={card.id}
                 className="kanban-card animate-fade-in"
                 draggable
-                onDragStart={() => setDragging(card.id)}>
+                onDragStart={() => setDragging(card.id)}
+                style={{ opacity: updatingId === card.id ? 0.6 : 1 }}>
                 <p className="text-sm font-medium text-white mb-2">{card.title}</p>
 
                 {card.customer && (
@@ -93,24 +129,29 @@ export default function KanbanBoard({ opportunities }: { opportunities: Opportun
                     </div>
                   ) : <span />}
 
-                  <a href={`/crm/${card.id}`}
+                  <Link href={`/crm/${card.id}`}
                     className="text-xs hover:underline"
                     style={{ color: 'var(--brand-red)' }}>
                     Detalhes
-                  </a>
+                  </Link>
                 </div>
               </div>
             ))}
 
             {/* Add button */}
-            <a href={`/crm/nova?stage=${key}`}
+            <Link href={`/crm/nova?stage=${key}`}
               className="flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs transition-all hover:bg-white/5"
               style={{ border: '1px dashed var(--border-hover)', color: 'var(--text-muted)' }}>
               + Adicionar
-            </a>
+            </Link>
           </div>
         )
       })}
+      {error && (
+        <div className="fixed bottom-4 right-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
     </div>
   )
 }

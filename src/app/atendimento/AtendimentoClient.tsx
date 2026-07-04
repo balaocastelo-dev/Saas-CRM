@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { MessageSquare, Send, Search, CheckCheck, Check, Clock, User } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Loader2, MessageSquare, Send, Search, CheckCheck, Check, Clock, User } from 'lucide-react'
 import { formatPhone } from '@/lib/utils'
 
 interface Conversation {
@@ -15,17 +15,38 @@ interface Conversation {
   messages?: Array<{ content: string; direction: string; created_at: string; status: string }>
 }
 
+function formatMessageTime(value: string, timeZone?: string) {
+  return new Intl.DateTimeFormat('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(timeZone ? { timeZone } : {}),
+  }).format(new Date(value))
+}
+
+function MessageTime({ value }: { value: string }) {
+  const [label, setLabel] = useState(() => formatMessageTime(value, 'UTC'))
+
+  useEffect(() => {
+    setLabel(formatMessageTime(value))
+  }, [value])
+
+  return <span suppressHydrationWarning>{label}</span>
+}
+
 export default function AtendimentoClient({ conversations }: { conversations: Conversation[] }) {
+  const [conversationList, setConversationList] = useState(conversations)
   const [selectedId, setSelectedId] = useState<string | null>(conversations[0]?.id || null)
   const [message, setMessage] = useState('')
   const [search, setSearch] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState('')
 
-  const filtered = conversations.filter(c =>
+  const filtered = conversationList.filter(c =>
     c.customer?.name?.toLowerCase().includes(search.toLowerCase()) ||
     c.phone?.includes(search)
   )
 
-  const selected = conversations.find(c => c.id === selectedId)
+  const selected = conversationList.find(c => c.id === selectedId)
   const messages = selected?.messages || []
 
   const statusIcon = (status: string) => {
@@ -33,6 +54,57 @@ export default function AtendimentoClient({ conversations }: { conversations: Co
     if (status === 'delivered') return <CheckCheck size={13} style={{ color: 'var(--text-muted)' }} />
     if (status === 'sent') return <Check size={13} style={{ color: 'var(--text-muted)' }} />
     return <Clock size={13} style={{ color: 'var(--text-muted)' }} />
+  }
+
+  async function handleSendMessage() {
+    if (!selected || !message.trim() || sending) return
+
+    setSending(true)
+    setSendError('')
+
+    try {
+      const response = await fetch('/api/atendimento/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          conversationId: selected.id,
+          text: message.trim(),
+        }),
+      })
+
+      const payload = await response.json()
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Não foi possível enviar a mensagem.')
+      }
+
+      const createdMessage = payload.message as {
+        content: string
+        direction: string
+        created_at: string
+        status: string
+      }
+
+      setConversationList(prev =>
+        prev.map(conv =>
+          conv.id === selected.id
+            ? {
+                ...conv,
+                status: 'em_atendimento',
+                last_message_at: createdMessage.created_at,
+                messages: [...(conv.messages || []), createdMessage],
+              }
+            : conv
+        )
+      )
+      setMessage('')
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : 'Erro ao enviar mensagem.')
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -73,7 +145,7 @@ export default function AtendimentoClient({ conversations }: { conversations: Co
                       </p>
                       {lastMsg && (
                         <span className="text-xs flex-shrink-0 ml-1" style={{ color: 'var(--text-muted)' }}>
-                          {new Date(lastMsg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          <MessageTime value={lastMsg.created_at} />
                         </span>
                       )}
                     </div>
@@ -142,7 +214,7 @@ export default function AtendimentoClient({ conversations }: { conversations: Co
                   </div>
                   <div className={`flex items-center gap-1 mt-0.5 ${msg.direction === 'outbound' ? 'justify-end' : ''}`}>
                     <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                      {new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      <MessageTime value={msg.created_at} />
                     </span>
                     {msg.direction === 'outbound' && statusIcon(msg.status)}
                   </div>
@@ -172,14 +244,19 @@ export default function AtendimentoClient({ conversations }: { conversations: Co
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
-                    // TODO: send message
+                    void handleSendMessage()
                   }
                 }}
               />
-              <button className="btn-primary p-2.5" disabled={!message.trim()}>
-                <Send size={16} />
+              <button className="btn-primary p-2.5" disabled={!message.trim() || sending} onClick={() => void handleSendMessage()}>
+                {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
               </button>
             </div>
+            {sendError && (
+              <p className="text-xs mt-2 text-red-400">
+                {sendError}
+              </p>
+            )}
             <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
               ⚠️ Mensagens livres só podem ser enviadas dentro da janela de 24h após última interação do cliente
             </p>

@@ -1,35 +1,88 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Save, Loader2, Settings, MessageSquare, Building2, Shield } from 'lucide-react'
-import type { Metadata } from 'next'
 
 interface Setting {
   key: string
-  value: string
+  value: unknown
   description: string
   is_secret: boolean
 }
 
+interface RuntimeWhatsappConfig {
+  configured: boolean
+  accessTokenConfigured: boolean
+  accessTokenPreview: string
+  phoneNumberId: string
+  businessAccountId: string
+  verifyTokenConfigured: boolean
+  verifyTokenPreview: string
+  appSecretConfigured: boolean
+  appSecretPreview: string
+  webhookUrl: string
+}
+
+const DEFAULT_SETTINGS: Record<string, string> = {
+  company_name: '',
+  company_website: '',
+  company_address: '',
+  company_phone1: '',
+  company_phone2: '',
+  whatsapp_access_token: '',
+  whatsapp_phone_number_id: '',
+  whatsapp_business_account_id: '',
+  whatsapp_verify_token: '',
+  whatsapp_app_secret: '',
+  campaign_daily_limit: '1000',
+  campaign_batch_interval: '5',
+  business_hours_start: '08:00',
+  business_hours_end: '18:00',
+  ai_enabled: 'false',
+  ai_transfer_keyword: 'atendente',
+}
+
 export default function ConfiguracoesPage() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [settings, setSettings] = useState<Record<string, string>>({})
+  const [runtimeWhatsapp, setRuntimeWhatsapp] = useState<RuntimeWhatsappConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [activeTab, setActiveTab] = useState('empresa')
 
   useEffect(() => {
-    supabase.from('settings').select('*').then(({ data }) => {
+    async function loadSettings() {
+      const [{ data }, runtimeResponse] = await Promise.all([
+        supabase.from('settings').select('*'),
+        fetch('/api/settings/runtime').catch(() => null),
+      ])
+
+      const map: Record<string, string> = { ...DEFAULT_SETTINGS }
       if (data) {
-        const map: Record<string, string> = {}
-        data.forEach((s: Setting) => { map[s.key] = s.value || '' })
-        setSettings(map)
+        data.forEach((s: Setting) => {
+          map[s.key] =
+            typeof s.value === 'string'
+              ? s.value
+              : s.value === null || s.value === undefined
+                ? ''
+                : String(s.value)
+        })
       }
+
+      setSettings(map)
+
+      if (runtimeResponse?.ok) {
+        const runtimeData = await runtimeResponse.json()
+        setRuntimeWhatsapp(runtimeData.whatsapp || null)
+      }
+
       setLoading(false)
-    })
-  }, [])
+    }
+
+    void loadSettings()
+  }, [supabase])
 
   async function handleSave() {
     setSaving(true)
@@ -131,6 +184,40 @@ export default function ConfiguracoesPage() {
           {/* WhatsApp */}
           {activeTab === 'whatsapp' && (
             <div className="card p-6 flex flex-col gap-4">
+              {runtimeWhatsapp && (
+                <div className="rounded-lg p-4"
+                  style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium" style={{ color: '#86efac' }}>Runtime ativo na Vercel</p>
+                      <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+                        O backend usa esta configuração em tempo real, mesmo quando a tabela `settings` ainda está vazia.
+                      </p>
+                    </div>
+                    <span className={`badge ${runtimeWhatsapp.configured ? 'badge-green' : 'badge-gray'}`}>
+                      {runtimeWhatsapp.configured ? 'Configurado' : 'Incompleto'}
+                    </span>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-3 mt-4 text-xs">
+                    <div>
+                      <p style={{ color: 'var(--text-muted)' }}>Access Token</p>
+                      <p className="text-white">{runtimeWhatsapp.accessTokenConfigured ? runtimeWhatsapp.accessTokenPreview : 'Não configurado'}</p>
+                    </div>
+                    <div>
+                      <p style={{ color: 'var(--text-muted)' }}>Phone Number ID</p>
+                      <p className="text-white">{runtimeWhatsapp.phoneNumberId || 'Não configurado'}</p>
+                    </div>
+                    <div>
+                      <p style={{ color: 'var(--text-muted)' }}>Business Account ID</p>
+                      <p className="text-white">{runtimeWhatsapp.businessAccountId || 'Não configurado'}</p>
+                    </div>
+                    <div>
+                      <p style={{ color: 'var(--text-muted)' }}>Verify Token</p>
+                      <p className="text-white">{runtimeWhatsapp.verifyTokenConfigured ? runtimeWhatsapp.verifyTokenPreview : 'Não configurado'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="rounded-lg p-3"
                 style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
                 <p className="text-sm font-medium" style={{ color: '#fbbf24' }}>⚠️ Credenciais sensíveis</p>
@@ -160,7 +247,7 @@ export default function ConfiguracoesPage() {
                 style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
                 <p className="text-xs font-medium" style={{ color: '#86efac' }}>URL do webhook:</p>
                 <code className="text-xs" style={{ color: '#4ade80' }}>
-                  {`${process.env.NEXT_PUBLIC_APP_URL || 'https://seusite.vercel.app'}/api/webhooks/whatsapp`}
+                  {runtimeWhatsapp?.webhookUrl || `${process.env.NEXT_PUBLIC_APP_URL || 'https://seusite.vercel.app'}/api/webhooks/whatsapp`}
                 </code>
               </div>
             </div>

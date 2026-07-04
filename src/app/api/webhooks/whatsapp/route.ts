@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { 
-  verifyWebhookSignature, 
-  parseWebhookPayload, 
-  type WebhookPayload 
-} from '@/lib/whatsapp/client'
-import { createClient } from '@supabase/supabase-js'
+import type { WebhookMessage, WebhookStatusUpdate } from '@/lib/whatsapp/client'
 
-// Supabase admin client (service role key)
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-)
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
+type SupabaseAdminClient = ReturnType<typeof import('@/lib/supabase/admin').createAdminClient>
 
 // OPT-OUT keywords
 const OPT_OUT_KEYWORDS = ['SAIR', 'PARAR', 'CANCELAR', 'STOP', 'DESINSCREVER']
@@ -42,6 +35,12 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const [{ createAdminClient }, { verifyWebhookSignature, parseWebhookPayload }] = await Promise.all([
+      import('@/lib/supabase/admin'),
+      import('@/lib/whatsapp/client'),
+    ])
+
+    const supabaseAdmin = createAdminClient()
     const body = await request.text()
     
     // Verificar assinatura da Meta
@@ -56,17 +55,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const payload = JSON.parse(body) as WebhookPayload
+    const payload = JSON.parse(body)
     const { messages, statuses } = parseWebhookPayload(payload)
 
     // Process incoming messages
     for (const msg of messages) {
-      await processIncomingMessage(msg)
+      await processIncomingMessage(supabaseAdmin, msg)
     }
 
     // Process status updates
     for (const status of statuses) {
-      await processStatusUpdate(status)
+      await processStatusUpdate(supabaseAdmin, status)
     }
 
     return NextResponse.json({ status: 'ok' })
@@ -76,7 +75,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function processIncomingMessage(msg: any) {
+async function processIncomingMessage(supabaseAdmin: SupabaseAdminClient, msg: WebhookMessage) {
   const phone = msg.from
   const text = msg.text?.body?.trim().toUpperCase() || ''
   const content = msg.text?.body || ''
@@ -140,9 +139,9 @@ async function processIncomingMessage(msg: any) {
     // Log audit
     await supabaseAdmin.from('audit_logs').insert({
       action: 'OPT_OUT',
-      entity_type: 'customer',
+      entity: 'customer',
       entity_id: customer?.id,
-      new_values: { keyword: text, phone },
+      details: { keyword: text, phone },
     })
 
     console.log(`[Webhook] Opt-out processado para ${phone}`)
@@ -161,10 +160,10 @@ async function processIncomingMessage(msg: any) {
     if (!existingOpp) {
       await supabaseAdmin.from('opportunities').insert({
         customer_id: customer.id,
-        title: `Lead via WhatsApp — ${customer.name}`,
+        title: `Lead via WhatsApp - ${customer.name}`,
         stage: 'novo_lead',
-        origin: 'WhatsApp',
-        notes: `Cliente respondeu "${text}" via campanha WhatsApp`,
+        source: 'WhatsApp',
+        description: `Cliente respondeu "${text}" via campanha WhatsApp`,
       })
       console.log(`[Webhook] Oportunidade criada para ${customer.name}`)
     }
@@ -177,7 +176,7 @@ async function processIncomingMessage(msg: any) {
     .eq('key', 'ai_enabled')
     .maybeSingle()
 
-  if (aiSetting?.value === 'true') {
+  if (aiSetting?.value === 'true' || aiSetting?.value === true) {
     const aiResponse = getAIResponse(content)
     if (aiResponse) {
       const { sendTextMessage } = await import('@/lib/whatsapp/client')
@@ -195,7 +194,29 @@ async function processIncomingMessage(msg: any) {
   }
 }
 
-async function processStatusUpdate(statusUpdate: any) {
+async function incrementCampaignCounter(
+  supabaseAdmin: SupabaseAdminClient,
+  campaignId: string,
+  field: 'sent_count' | 'delivered_count' | 'read_count' | 'failed_count'
+) {
+  const { data: campaign } = await supabaseAdmin
+    .from('campaigns')
+    .select('id, sent_count, delivered_count, read_count, failed_count')
+    .eq('id', campaignId)
+    .maybeSingle()
+
+  if (!campaign) return
+
+  await supabaseAdmin
+    .from('campaigns')
+    .update({
+      [field]: (campaign[field] || 0) + 1,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', campaignId)
+}
+
+async function processStatusUpdate(supabaseAdmin: SupabaseAdminClient, statusUpdate: WebhookStatusUpdate) {
   const { id: wamid, status } = statusUpdate
   
   // Map Meta status to our status
@@ -229,15 +250,11 @@ async function processStatusUpdate(statusUpdate: any) {
 
     // Update campaign counters
     if (status === 'delivered') {
-      await supabaseAdmin.rpc('increment_campaign_counter', {
-        p_campaign_id: message.campaign_id,
-        p_field: 'delivered_count'
-      })
+      await incrementCampaignCounter(supabaseAdmin, message.campaign_id, 'delivered_count')
     } else if (status === 'read') {
-      await supabaseAdmin.rpc('increment_campaign_counter', {
-        p_campaign_id: message.campaign_id,
-        p_field: 'read_count'
-      })
+      await incrementCampaignCounter(supabaseAdmin, message.campaign_id, 'read_count')
+    } else if (status === 'failed') {
+      await incrementCampaignCounter(supabaseAdmin, message.campaign_id, 'failed_count')
     }
   }
 }

@@ -74,6 +74,24 @@ export const STAGE_LABELS: Record<string, string> = {
   perdido: 'Perdido',
 }
 
+export const PRODUCT_CATEGORY_LABELS: Record<string, string> = {
+  notebooks: 'Notebooks',
+  pcs_gamer: 'PCs Gamer',
+  placas_video: 'Placas de Vídeo',
+  monitores: 'Monitores',
+  perifericos: 'Periféricos',
+  assistencia: 'Assistência',
+  licencas: 'Licenças',
+  impressoras: 'Impressoras',
+  outros: 'Outros',
+}
+
+export const PRODUCT_STATUS_LABELS: Record<string, string> = {
+  ativo: 'Ativo',
+  inativo: 'Inativo',
+  sem_estoque: 'Sem estoque',
+}
+
 export const SERVICE_ORDER_STATUS_LABELS: Record<string, string> = {
   recebido: 'Recebido',
   em_analise: 'Em Análise',
@@ -83,6 +101,14 @@ export const SERVICE_ORDER_STATUS_LABELS: Record<string, string> = {
   pronto: 'Pronto',
   entregue: 'Entregue',
   cancelado: 'Cancelado',
+}
+
+export const QUOTE_STATUS_LABELS: Record<string, string> = {
+  rascunho: 'Rascunho',
+  enviado: 'Enviado',
+  aprovado: 'Aprovado',
+  rejeitado: 'Rejeitado',
+  expirado: 'Expirado',
 }
 
 export const MESSAGE_STATUS_LABELS: Record<string, string> = {

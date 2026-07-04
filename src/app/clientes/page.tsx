@@ -58,7 +58,7 @@ export default async function ClientesPage({
         <div className="flex items-center gap-2">
           <Link href="/clientes/importar" className="btn-secondary">
             <Upload size={15} />
-            Importar CSV
+            Importar CSV/Excel
           </Link>
           <Link href="/clientes/novo" className="btn-primary">
             <Plus size={15} />
