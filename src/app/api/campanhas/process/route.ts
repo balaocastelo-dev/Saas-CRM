@@ -17,15 +17,28 @@ const processCampaignSchema = z.object({
 })
 
 function isAuthorizedCronRequest(request: NextRequest) {
-  const expectedSecret = process.env.CAMPAIGN_PROCESSOR_SECRET?.trim()
-  if (!expectedSecret) {
+  const expectedSecrets = [
+    process.env.CAMPAIGN_PROCESSOR_SECRET?.trim() || '',
+    process.env.CRON_SECRET?.trim() || '',
+  ].filter(Boolean)
+
+  if (expectedSecrets.length === 0) {
     return false
   }
 
+  const authorizationHeader = request.headers.get('authorization')?.trim() || ''
   const headerSecret = request.headers.get('x-campaign-secret')?.trim()
   const querySecret = request.nextUrl.searchParams.get('secret')?.trim()
+  const bearerSecret = authorizationHeader.startsWith('Bearer ')
+    ? authorizationHeader.slice('Bearer '.length).trim()
+    : ''
 
-  return headerSecret === expectedSecret || querySecret === expectedSecret
+  return expectedSecrets.some(
+    secret =>
+      headerSecret === secret ||
+      querySecret === secret ||
+      bearerSecret === secret
+  )
 }
 
 export async function GET(request: NextRequest) {
