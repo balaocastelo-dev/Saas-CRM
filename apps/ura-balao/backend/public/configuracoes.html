@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configurações - URA Ativa Balão</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand-section">
+        <div class="brand-logo">B</div>
+        <div class="brand-name">URA ATIVA <span class="brand-sub">BALÃO</span></div>
+      </div>
+      <nav class="nav-menu">
+        <a href="dashboard.html" class="nav-link"><span>Dashboard</span></a>
+        <a href="clientes.html" class="nav-link"><span>Clientes</span></a>
+        <a href="campanhas.html" class="nav-link"><span>Campanhas</span></a>
+        <a href="chamadas.html" class="nav-link"><span>Histórico / Testes</span></a>
+        <a href="configuracoes.html" class="nav-link"><span>Configurações SIP</span></a>
+        <a href="diagnostico-sip.html" class="nav-link"><span>Diagnóstico SIP</span></a>
+      </nav>
+      <div class="logout-section">
+        <button class="btn-logout" id="btn-logout">Sair</button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="header-wrapper">
+        <div>
+          <h1 class="page-title">Configurações de Conexão</h1>
+          <p class="page-subtitle">Ajuste os parâmetros do SIP Telefonia Fácil e as credenciais AMI do Asterisk</p>
+        </div>
+      </div>
+
+      <form id="settings-form">
+        <!-- SIP Settings -->
+        <div class="content-card">
+          <h3 class="content-card-title">Parâmetros SIP (Telefonia Fácil)</h3>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-SIP_HOST">Servidor SIP (Host)</label>
+              <input class="form-control" type="text" id="config-SIP_HOST" required>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label" for="config-SIP_DOMAIN">Domínio SIP</label>
+              <input class="form-control" type="text" id="config-SIP_DOMAIN" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-SIP_OUTBOUND_PROXY">Outbound Proxy</label>
+              <input class="form-control" type="text" id="config-SIP_OUTBOUND_PROXY" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="config-SIP_PORT">Porta SIP ativa</label>
+              <input class="form-control" type="text" id="config-SIP_PORT" required placeholder="Ex: AUTO ou 5179">
+              <small style="color:var(--text-secondary)">Se estiver AUTO, execute a varredura na aba Diagnóstico SIP primeiro.</small>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-SIP_USERNAME">Ramal / Usuário SIP</label>
+              <input class="form-control" type="text" id="config-SIP_USERNAME" required>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label" for="config-SIP_AUTH_USERNAME">Nome de Autenticação SIP</label>
+              <input class="form-control" type="text" id="config-SIP_AUTH_USERNAME" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-SIP_PASSWORD">Senha SIP</label>
+              <input class="form-control" type="password" id="config-SIP_PASSWORD" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="config-SIP_FROM_USER">SIP From User</label>
+              <input class="form-control" type="text" id="config-SIP_FROM_USER" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-SIP_TRANSPORT">Transporte SIP</label>
+              <select class="form-control" id="config-SIP_TRANSPORT">
+                <option value="udp">UDP (Recomendado)</option>
+                <option value="tcp">TCP</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="config-SIP_POSSIBLE_PORTS">Portas SIP Prováveis (Lista Escaneamento)</label>
+              <input class="form-control" type="text" id="config-SIP_POSSIBLE_PORTS" required>
+              <small style="color:var(--text-secondary)">Separado por vírgula. Ex: 5179,5060,5160,5080,5061</small>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-SIP_STUN_ENABLED">Habilitar STUN</label>
+              <select class="form-control" id="config-SIP_STUN_ENABLED">
+                <option value="false">Desativado</option>
+                <option value="true">Ativado</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="config-SIP_TLS_ENABLED">Habilitar TLS / Criptografia</label>
+              <select class="form-control" id="config-SIP_TLS_ENABLED">
+                <option value="false">Desativado</option>
+                <option value="true">Ativado</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-COMPANY_NAME">Nome de Exibição da Empresa</label>
+              <input class="form-control" type="text" id="config-COMPANY_NAME" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-CATALOG_BASE_URL">URL base do catálogo</label>
+              <input class="form-control" type="text" id="config-CATALOG_BASE_URL" value="https://www.balao.info" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="config-GEMINI_MODEL">Modelo Gemini</label>
+              <input class="form-control" type="text" id="config-GEMINI_MODEL" value="gemini-3.5-flash">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-GEMINI_API_KEY">Chave API Gemini</label>
+              <input class="form-control" type="password" id="config-GEMINI_API_KEY" placeholder="Cole aqui sua chave do Google AI Studio">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="config-ELEVENLABS_API_KEY">Chave API ElevenLabs</label>
+              <input class="form-control" type="password" id="config-ELEVENLABS_API_KEY" placeholder="Cole aqui sua chave da ElevenLabs">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-ELEVENLABS_VOICE_ID">Voice ID ElevenLabs</label>
+              <input class="form-control" type="text" id="config-ELEVENLABS_VOICE_ID" placeholder="Ex: JBFqnCBsd6RMkjVDRZzb">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="config-ELEVENLABS_MODEL_ID">Modelo ElevenLabs</label>
+              <input class="form-control" type="text" id="config-ELEVENLABS_MODEL_ID" value="eleven_multilingual_v2">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-ELEVENLABS_OUTPUT_FORMAT">Formato de saída</label>
+              <input class="form-control" type="text" id="config-ELEVENLABS_OUTPUT_FORMAT" value="mp3_44100_128">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="config-ELEVENLABS_USE_SPEAKER_BOOST">Speaker Boost</label>
+              <select class="form-control" id="config-ELEVENLABS_USE_SPEAKER_BOOST">
+                <option value="true">Ativado</option>
+                <option value="false">Desativado</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-ELEVENLABS_STABILITY">Stability</label>
+              <input class="form-control" type="number" step="0.01" min="0" max="1" id="config-ELEVENLABS_STABILITY" value="0.38">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="config-ELEVENLABS_SIMILARITY_BOOST">Similarity Boost</label>
+              <input class="form-control" type="number" step="0.01" min="0" max="1" id="config-ELEVENLABS_SIMILARITY_BOOST" value="0.82">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-ELEVENLABS_STYLE">Style</label>
+              <input class="form-control" type="number" step="0.01" min="0" max="1" id="config-ELEVENLABS_STYLE" value="0.25">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="config-ELEVENLABS_SPEED">Velocidade da voz</label>
+              <input class="form-control" type="number" step="0.01" min="0.7" max="1.2" id="config-ELEVENLABS_SPEED" value="1.0">
+            </div>
+          </div>
+        </div>
+
+        <!-- AMI Settings -->
+        <div class="content-card">
+          <h3 class="content-card-title">
+            Parâmetros do Asterisk Manager Interface (AMI)
+            <span id="settings-ami-status" style="font-size: 12px; margin-left:15px; font-weight:600;"></span>
+          </h3>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-ASTERISK_AMI_HOST">IP do Servidor Asterisk (Host AMI)</label>
+              <input class="form-control" type="text" id="config-ASTERISK_AMI_HOST" required>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label" for="config-ASTERISK_AMI_PORT">Porta AMI</label>
+              <input class="form-control" type="number" id="config-ASTERISK_AMI_PORT" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-ASTERISK_AMI_USER">Usuário AMI</label>
+              <input class="form-control" type="text" id="config-ASTERISK_AMI_USER" required>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label" for="config-ASTERISK_AMI_PASSWORD">Senha AMI</label>
+              <input class="form-control" type="password" id="config-ASTERISK_AMI_PASSWORD" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="config-WHATSAPP_NUMBER">Número WhatsApp da Empresa (para retorno)</label>
+              <input class="form-control" type="text" id="config-WHATSAPP_NUMBER" required>
+              <small style="color:var(--text-secondary)">Formato E.164. Ex: 5519987510267</small>
+            </div>
+          </div>
+
+          <div class="btn-group">
+            <button class="btn btn-primary" type="submit">Salvar Configurações</button>
+            <button class="btn btn-secondary" type="button" id="btn-test-ami" onclick="testAmiConnection()">Testar Conexão Asterisk</button>
+          </div>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

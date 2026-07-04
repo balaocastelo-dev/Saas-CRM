@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { 
   LayoutDashboard, Users, MessageSquare, Megaphone, 
   FileText, Wrench, ShoppingBag, BarChart3, Settings,
-  Zap, ChevronRight, Bot, Package, Inbox, LogOut
+  Zap, ChevronRight, Bot, Package, Inbox, LogOut, PhoneCall
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -46,6 +46,7 @@ const navSections = [
   {
     title: 'Sistema',
     items: [
+      { href: '/ura', icon: PhoneCall, label: 'URA Ativa' },
       { href: '/configuracoes', icon: Settings, label: 'Configurações' },
     ]
   },

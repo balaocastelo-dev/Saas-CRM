@@ -37,6 +37,27 @@
 
 ---
 
+## URA Unificada
+
+O repositório agora também contém a URA ativa em `apps/ura-balao`, mantida como serviço local separado do CRM.
+
+Comandos na raiz:
+
+```bash
+npm run ura:install
+npm run ura:start
+npm run ura:dev
+```
+
+Atalhos Windows:
+
+- `install-ura-balao.cmd`
+- `start-ura-balao.cmd`
+
+Guia complementar: `docs/ura-balao-integracao.md`
+
+---
+
 ## 🚀 Stack Técnica
 
 - **Frontend:** Next.js 14 (App Router) + TypeScript

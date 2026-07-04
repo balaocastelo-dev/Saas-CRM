@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Histórico de Chamadas - URA Ativa Balão</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand-section">
+        <div class="brand-logo">B</div>
+        <div class="brand-name">URA ATIVA <span class="brand-sub">BALÃO</span></div>
+      </div>
+      <nav class="nav-menu">
+        <a href="dashboard.html" class="nav-link"><span>Dashboard</span></a>
+        <a href="clientes.html" class="nav-link"><span>Clientes</span></a>
+        <a href="campanhas.html" class="nav-link"><span>Campanhas</span></a>
+        <a href="chamadas.html" class="nav-link"><span>Histórico / Testes</span></a>
+        <a href="configuracoes.html" class="nav-link"><span>Configurações SIP</span></a>
+        <a href="diagnostico-sip.html" class="nav-link"><span>Diagnóstico SIP</span></a>
+      </nav>
+      <div class="logout-section">
+        <button class="btn-logout" id="btn-logout">Sair</button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="header-wrapper">
+        <div>
+          <h1 class="page-title">Histórico e Teste de Ligação</h1>
+          <p class="page-subtitle">Acompanhe as chamadas da fila em tempo real ou faça uma ligação de teste avulsa</p>
+        </div>
+        <div>
+          <a class="btn btn-secondary" href="/api/export/calls.csv" style="text-decoration: none;">Exportar Relatório CSV</a>
+        </div>
+      </div>
+
+      <!-- Teste de Ligação Avulsa -->
+      <div class="content-card">
+        <h3 class="content-card-title">Disparar Ligação de Teste (Avulsa)</h3>
+        <form id="test-call-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="test-phone">Telefone de Teste (com DDD)</label>
+              <input class="form-control" type="text" id="test-phone" value="19984515960" placeholder="Ex: 19984515960" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="test-category">Categoria do balao.info</label>
+              <select class="form-control" id="test-category">
+                <option value="ssd">SSD / NVMe</option>
+                <option value="memoria">Memória RAM</option>
+                <option value="gpu">Placa de Vídeo</option>
+                <option value="monitor">Monitor</option>
+                <option value="cpu">Processador</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="test-product">Produto real do balao.info</label>
+              <select class="form-control" id="test-product">
+                <option value="">Carregando produtos...</option>
+              </select>
+              <small style="color:var(--text-secondary)">A URA usará este item como oferta da ligação.</small>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="test-product-url">Ou carregue direto pela URL do produto</label>
+              <input class="form-control" type="url" id="test-product-url" placeholder="https://www.balao.info/product/...">
+              <small style="color:var(--text-secondary)">Se a categoria não listar bem, cole a URL do produto do balao.info e carregue.</small>
+            </div>
+            <div class="form-group" style="display:flex; align-items:flex-end;">
+              <button class="btn btn-secondary" type="button" id="btn-load-test-url">Carregar Produto da URL</button>
+            </div>
+          </div>
+          <button class="btn btn-primary" type="submit">Ligar Agora</button>
+        </form>
+      </div>
+
+      <!-- Tabela do Histórico -->
+      <div class="content-card">
+        <h3 class="content-card-title">Logs de Ligações Realizadas</h3>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Cliente / Número</th>
+                <th>Campanha Origem</th>
+                <th>Status Chamada</th>
+                <th>Teclado / Resposta URA</th>
+                <th>Duração</th>
+                <th>Tentativa nº</th>
+                <th>Data e Hora</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="calls-table-body">
+              <tr>
+                <td colspan="9" style="text-align: center; color: var(--text-secondary);">Carregando logs de chamadas...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

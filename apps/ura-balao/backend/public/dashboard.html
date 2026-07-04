@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - URA Ativa Balão</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand-section">
+        <div class="brand-logo">B</div>
+        <div class="brand-name">URA ATIVA <span class="brand-sub">BALÃO</span></div>
+      </div>
+      <nav class="nav-menu">
+        <a href="dashboard.html" class="nav-link"><span>Dashboard</span></a>
+        <a href="clientes.html" class="nav-link"><span>Clientes</span></a>
+        <a href="campanhas.html" class="nav-link"><span>Campanhas</span></a>
+        <a href="chamadas.html" class="nav-link"><span>Histórico / Testes</span></a>
+        <a href="configuracoes.html" class="nav-link"><span>Configurações SIP</span></a>
+        <a href="diagnostico-sip.html" class="nav-link"><span>Diagnóstico SIP</span></a>
+      </nav>
+      <div class="logout-section">
+        <button class="btn-logout" id="btn-logout">Sair</button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="header-wrapper">
+        <div>
+          <h1 class="page-title">Dashboard</h1>
+          <p class="page-subtitle">Visão geral do sistema de chamadas e respostas da URA</p>
+        </div>
+        <div>
+          <span id="system-status" style="font-weight: 600;">Verificando conexão...</span>
+        </div>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="stats-grid" id="dashboard-stats">
+        <div class="stat-card">
+          <span class="stat-title">Total de Clientes</span>
+          <span class="stat-value" id="stat-total-clients">-</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-title">Chamadas Realizadas</span>
+          <span class="stat-value red" id="stat-total-calls">-</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-title">Chamadas Atendidas</span>
+          <span class="stat-value green" id="stat-calls-answered">-</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-title">Não Atendidas</span>
+          <span class="stat-value orange" id="stat-calls-failed">-</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-title">Falaram com Atendente (Tecla 1)</span>
+          <span class="stat-value green" id="stat-pressed-1">-</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-title">Pediram WhatsApp (Tecla 2)</span>
+          <span class="stat-value green" id="stat-pressed-2">-</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-title">Contatos Bloqueados</span>
+          <span class="stat-value orange" id="stat-blacklist-count">-</span>
+        </div>
+      </div>
+
+      <!-- Informações Rápidas -->
+      <div class="content-card">
+        <h3 class="content-card-title">Resumo Operacional</h3>
+        <p style="margin-bottom: 12px; line-height: 1.6;">
+          Este painel permite gerenciar campanhas ativas para o <strong>Balão da Informática Castelo</strong> usando os ramais da <strong>Telefonia Fácil</strong>.
+          Seus contatos do WhatsApp são redirecionados automaticamente para o número padrão da loja para agilizar o pós-atendimento.
+        </p>
+        <div style="background-color: rgba(229, 9, 20, 0.05); border: 1px dashed rgba(229, 9, 20, 0.3); padding: 15px; border-radius: 8px;">
+          <h4 style="color: var(--primary-color); margin-bottom: 5px; font-size: 14px;">Importante sobre limites e boas práticas:</h4>
+          <p style="font-size: 13px; color: var(--text-secondary);">
+            O sistema está limitado a uma taxa segura de chamadas por minuto (padrão 1 por minuto) para evitar bloqueios SIP e garantir ligações somente para clientes com relacionamento prévio (assistência, pedidos, orçamentos, etc.).
+          </p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

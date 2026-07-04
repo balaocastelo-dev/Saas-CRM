@@ -1,0 +1,62 @@
+; =========================================================================
+; CONFIGURAÇÃO DO PJSIP PARA INTEGRAÇÃO COM A TELEFONIA FÁCIL
+; Arquivo: pjsip.conf.example
+; Copie este arquivo para /etc/asterisk/pjsip.conf (ou mescle com o existente)
+; =========================================================================
+
+; --- Transporte UDP ---
+[transport-udp]
+type=transport
+protocol=udp
+bind=0.0.0.0:5060
+
+; --- Registro no PBX da Telefonia Fácil ---
+[telefoniafacil-reg]
+type=registration
+transport=transport-udp
+outbound_auth=telefoniafacil-auth
+server_uri=sip:bala.pbx.telefoniafacil.com.br:5179
+client_uri=sip:2055@bala.pbx.telefoniafacil.com.br:5179
+contact_user=2055
+retry_interval=60
+forbidden_retry_interval=10
+expiration=300
+line=yes
+endpoint=telefoniafacil-out
+outbound_proxy=sip:bala.pbx.telefoniafacil.com.br:5179\;lr
+auth_rejection_permanent=no
+
+; --- Autenticação SIP ---
+[telefoniafacil-auth]
+type=auth
+auth_type=userpass
+username=2055
+password=Balao!2025 ; Substitua pela senha real configurada no .env
+;realm=bala.pbx.telefoniafacil.com.br
+
+; --- AOR (Address of Record) ---
+[telefoniafacil-out]
+type=aor
+contact=sip:bala.pbx.telefoniafacil.com.br:5179
+
+; --- Endpoint SIP ---
+[telefoniafacil-out]
+type=endpoint
+transport=transport-udp
+context=ura-outbound
+disallow=all
+allow=alaw
+allow=ulaw
+outbound_auth=telefoniafacil-auth
+aors=telefoniafacil-out
+from_user=2055
+from_domain=bala.pbx.telefoniafacil.com.br
+outbound_proxy=sip:bala.pbx.telefoniafacil.com.br:5179\;lr
+dtmf_mode=rfc4733
+direct_media=no
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
+
+; --- Identificação de Chamadas (Opcional) ---
+callerid="2055" <2055>

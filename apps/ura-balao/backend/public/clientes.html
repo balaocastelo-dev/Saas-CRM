@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clientes - URA Ativa Balão</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand-section">
+        <div class="brand-logo">B</div>
+        <div class="brand-name">URA ATIVA <span class="brand-sub">BALÃO</span></div>
+      </div>
+      <nav class="nav-menu">
+        <a href="dashboard.html" class="nav-link"><span>Dashboard</span></a>
+        <a href="clientes.html" class="nav-link"><span>Clientes</span></a>
+        <a href="campanhas.html" class="nav-link"><span>Campanhas</span></a>
+        <a href="chamadas.html" class="nav-link"><span>Histórico / Testes</span></a>
+        <a href="configuracoes.html" class="nav-link"><span>Configurações SIP</span></a>
+        <a href="diagnostico-sip.html" class="nav-link"><span>Diagnóstico SIP</span></a>
+      </nav>
+      <div class="logout-section">
+        <button class="btn-logout" id="btn-logout">Sair</button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="header-wrapper">
+        <div>
+          <h1 class="page-title">Gerenciamento de Clientes</h1>
+          <p class="page-subtitle">Cadastre contatos manualmente ou faça importações em lote</p>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <!-- Cadastro Manual -->
+        <div class="content-card">
+          <h3 class="content-card-title">Cadastro Manual</h3>
+          <form id="client-form">
+            <div class="form-group">
+              <label class="form-label" for="client-name">Nome Completo</label>
+              <input class="form-control" type="text" id="client-name" placeholder="Ex: João da Silva" required>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label" for="client-phone">Telefone (com DDD)</label>
+              <input class="form-control" type="text" id="client-phone" placeholder="Ex: (19) 99999-9999" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="client-reason">Motivo do Contato (Campanha)</label>
+              <input class="form-control" type="text" id="client-reason" placeholder="Ex: orcamento, assistencia, cobranca">
+              <small style="color:var(--text-secondary); display:block; margin-top:4px;">Usado para reproduzir o áudio correspondente na URA.</small>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="client-note">Observação Interna</label>
+              <input class="form-control" type="text" id="client-note" placeholder="Ex: Pedido nº 4501">
+            </div>
+
+            <button class="btn btn-primary" type="submit" style="width: 100%;">Salvar Cliente</button>
+          </form>
+        </div>
+
+        <!-- Importação em Lote -->
+        <div class="content-card">
+          <h3 class="content-card-title">Importação em Lote (CSV)</h3>
+          <form id="import-form">
+            <div class="form-group">
+              <label class="form-label" for="import-content">Cole o conteúdo CSV no formato: <strong>Nome;Telefone;Motivo</strong></label>
+              <textarea class="form-control" id="import-content" rows="8" placeholder="Ana Maria;19988776655;assistencia&#10;Carlos José;1932456789;orcamento" required style="font-family: monospace; font-size: 13px;"></textarea>
+            </div>
+            <button class="btn btn-secondary" type="submit" style="width: 100%; border-color: var(--primary-color); color: var(--primary-color);">Processar Lote de Clientes</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Lista de Clientes -->
+      <div class="content-card">
+        <h3 class="content-card-title">Lista de Clientes Cadastrados</h3>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nome</th>
+                <th>Telefone (E.164)</th>
+                <th>Motivo do Contato</th>
+                <th>Status da Chamada</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="clients-table-body">
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-secondary);">Carregando lista de clientes...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

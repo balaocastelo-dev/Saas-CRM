@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Campanhas - URA Ativa Balão</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand-section">
+        <div class="brand-logo">B</div>
+        <div class="brand-name">URA ATIVA <span class="brand-sub">BALÃO</span></div>
+      </div>
+      <nav class="nav-menu">
+        <a href="dashboard.html" class="nav-link"><span>Dashboard</span></a>
+        <a href="clientes.html" class="nav-link"><span>Clientes</span></a>
+        <a href="campanhas.html" class="nav-link"><span>Campanhas</span></a>
+        <a href="chamadas.html" class="nav-link"><span>Histórico / Testes</span></a>
+        <a href="configuracoes.html" class="nav-link"><span>Configurações SIP</span></a>
+        <a href="diagnostico-sip.html" class="nav-link"><span>Diagnóstico SIP</span></a>
+      </nav>
+      <div class="logout-section">
+        <button class="btn-logout" id="btn-logout">Sair</button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="header-wrapper">
+        <div>
+          <h1 class="page-title">Campanhas de URA Ativa</h1>
+          <p class="page-subtitle">Crie e acompanhe o andamento de disparos de ligações</p>
+        </div>
+      </div>
+
+      <!-- Nova Campanha -->
+      <div class="content-card">
+        <h3 class="content-card-title">Criar Nova Campanha</h3>
+        <form id="campaign-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="campaign-name">Nome da Campanha</label>
+              <input class="form-control" type="text" id="campaign-name" placeholder="Ex: Campanha Julho - Pós Venda" required>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label" for="campaign-message">Mensagem Manual / Fallback</label>
+              <input class="form-control" type="text" id="campaign-message" placeholder="Opcional se escolher um produto do balao.info">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="campaign-category">Categoria do balao.info</label>
+              <select class="form-control" id="campaign-category">
+                <option value="ssd">SSD / NVMe</option>
+                <option value="memoria">Memória RAM</option>
+                <option value="gpu">Placa de Vídeo</option>
+                <option value="monitor">Monitor</option>
+                <option value="cpu">Processador</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="campaign-product">Produto que a URA vai ofertar</label>
+              <select class="form-control" id="campaign-product">
+                <option value="">Carregando produtos...</option>
+              </select>
+              <small style="color:var(--text-secondary)">Se escolher um produto, a URA falará a oferta deste item do site.</small>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="campaign-product-url">Ou carregue direto pela URL do produto</label>
+              <input class="form-control" type="url" id="campaign-product-url" placeholder="https://www.balao.info/product/...">
+              <small style="color:var(--text-secondary)">Use a URL do produto do balao.info para definir exatamente o item da oferta.</small>
+            </div>
+
+            <div class="form-group" style="display:flex; align-items:flex-end;">
+              <button class="btn btn-secondary" type="button" id="btn-load-campaign-url">Carregar Produto da URL</button>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="campaign-cpm">Limite de Chamadas por Minuto (CPM)</label>
+              <input class="form-control" type="number" id="campaign-cpm" min="1" max="10" value="1" required>
+              <small style="color:var(--text-secondary)">Limite seguro. Recomendado manter em 1 ou 2.</small>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="campaign-attempts">Tentativas Máximas por Cliente</label>
+              <input class="form-control" type="number" id="campaign-attempts" min="1" max="5" value="2" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="campaign-start-hour">Horário de Início Permitido</label>
+              <input class="form-control" type="time" id="campaign-start-hour" value="09:00" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="campaign-end-hour">Horário de Fim Permitido</label>
+              <input class="form-control" type="time" id="campaign-end-hour" value="18:00" required>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" type="submit">Cadastrar Campanha</button>
+        </form>
+      </div>
+
+      <!-- Lista de Campanhas -->
+      <div class="content-card">
+        <h3 class="content-card-title">Campanhas Ativas / Histórico</h3>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Campanha / Detalhes</th>
+                <th>Limites / Tentativas</th>
+                <th>Janela Horária</th>
+                <th>Status</th>
+                <th>Progresso de Discagem</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="campaigns-table-body">
+              <tr>
+                <td colspan="7" style="text-align: center; color: var(--text-secondary);">Carregando campanhas...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

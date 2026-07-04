@@ -1,0 +1,21 @@
+; =========================================================================
+; CONFIGURAÇÃO DO AMI (ASTERISK MANAGER INTERFACE)
+; Arquivo: manager.conf.example
+; Copie este arquivo para /etc/asterisk/manager.conf (ou mescle com o existente)
+; =========================================================================
+
+[general]
+enabled = yes
+port = 5038
+bindaddr = 0.0.0.0 ; Permite conexões locais e do contêiner Docker/WSL se necessário
+webenabled = no
+
+[uraadmin]
+secret = troque_essa_senha ; Altere para a mesma senha configurada no arquivo .env (ASTERISK_AMI_PASSWORD)
+deny = 0.0.0.0/0.0.0.0
+permit = 127.0.0.1/255.255.255.255 ; Permite conexões apenas da máquina local por segurança
+; Caso o Node.js e o Asterisk rodem em contêineres diferentes na mesma rede, ajuste a rede permitida.
+; permit = 172.16.0.0/255.240.0.0 
+
+read = system,call,log,verbose,agent,user,config,dtmf
+write = system,call,agent,user,config,originate

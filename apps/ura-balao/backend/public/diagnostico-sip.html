@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diagnóstico SIP - URA Ativa Balão</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand-section">
+        <div class="brand-logo">B</div>
+        <div class="brand-name">URA ATIVA <span class="brand-sub">BALÃO</span></div>
+      </div>
+      <nav class="nav-menu">
+        <a href="dashboard.html" class="nav-link"><span>Dashboard</span></a>
+        <a href="clientes.html" class="nav-link"><span>Clientes</span></a>
+        <a href="campanhas.html" class="nav-link"><span>Campanhas</span></a>
+        <a href="chamadas.html" class="nav-link"><span>Histórico / Testes</span></a>
+        <a href="configuracoes.html" class="nav-link"><span>Configurações SIP</span></a>
+        <a href="diagnostico-sip.html" class="nav-link"><span>Diagnóstico SIP</span></a>
+      </nav>
+      <div class="logout-section">
+        <button class="btn-logout" id="btn-logout">Sair</button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="header-wrapper">
+        <div>
+          <h1 class="page-title">Diagnóstico de Rede SIP</h1>
+          <p class="page-subtitle">Faça testes de portas UDP, analise conexões e verifique o registro do ramal</p>
+        </div>
+      </div>
+
+      <div class="diag-grid">
+        <!-- Ações de Diagnóstico -->
+        <div class="content-card" style="margin-bottom:0;">
+          <h3 class="content-card-title">Ferramentas de Diagnóstico</h3>
+          
+          <div style="display:flex; flex-direction:column; gap:15px;">
+            <div>
+              <h4 style="margin-bottom:8px; font-size:14px; font-weight:600;">1. Busca de Portas SIP Prováveis (Automático)</h4>
+              <button class="btn btn-primary" id="btn-scan-ports" onclick="runAutoPortScan()" style="width:100%;">Buscar Portas SIP (Auto)</button>
+              <small style="color:var(--text-secondary); display:block; margin-top:5px;">Varre portas UDP 5060, 5160, 5080, 5061 no host da Telefonia Fácil.</small>
+            </div>
+
+            <hr style="border-color:var(--border-color);">
+
+            <div>
+              <h4 style="margin-bottom:8px; font-size:14px; font-weight:600;">2. Consultar Registro SIP no Asterisk</h4>
+              <button class="btn btn-secondary" id="btn-test-registration" onclick="testSipRegistration()" style="width:100%;">Testar Registro SIP</button>
+              <small style="color:var(--text-secondary); display:block; margin-top:5px;">Verifica se o Asterisk está registrado com sucesso na Telefonia Fácil via console PJSIP.</small>
+            </div>
+
+            <hr style="border-color:var(--border-color);">
+
+            <div>
+              <h4 style="margin-bottom:8px; font-size:14px; font-weight:600;">3. Testar Porta SIP Manual</h4>
+              <div style="display:flex; gap:10px;">
+                <input class="form-control" type="number" id="manual-sip-port" placeholder="Ex: 5160" style="flex:1;">
+                <button class="btn btn-secondary" onclick="testSinglePortManual()">Testar Porta</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Terminal de Logs de Teste -->
+        <div class="content-card" style="margin-bottom:0; display:flex; flex-direction:column;">
+          <h3 class="content-card-title">Console de Diagnóstico</h3>
+          <p style="font-size:13px; color:var(--text-secondary)">Acompanhe abaixo os detalhes das consultas de rede em tempo real:</p>
+          
+          <div class="log-box" id="diag-logs">Nenhum teste executado ainda. Clique em "Buscar Portas SIP (Auto)" ou outra ação para iniciar...</div>
+
+          <!-- Ação Salvar Porta Descoberta -->
+          <div id="save-discovered-port-container" style="display:none; margin-top:20px; background-color:rgba(0, 230, 118, 0.05); border:1px dashed rgba(0, 230, 118, 0.3); padding:15px; border-radius:8px;">
+            <p style="font-size:13px; margin-bottom:10px; font-weight:600; color:var(--success-color);">Uma porta ativa foi encontrada!</p>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <input class="form-control" type="text" id="discovered-port" readonly style="width:100px; text-align:center; font-weight:700;">
+              <button class="btn btn-primary" onclick="saveDiscoveredPort()" style="padding:10px 15px; font-size:13px; background-color:var(--success-color); box-shadow:none;">Salvar Porta Encontrada</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

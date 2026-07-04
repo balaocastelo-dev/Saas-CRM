@@ -1,0 +1,24 @@
+.dbg/
+.DS_Store
+Thumbs.db
+
+# Node / backend
+backend/node_modules/
+backend/.env
+backend/cookies.txt
+backend/database.sqlite
+backend/generated-tts/
+
+# Python / caches
+__pycache__/
+*.pyc
+scripts/__pycache__/
+
+# Local toolchains and downloaded models
+scripts/tools/
+scripts/temp_tts/
+
+# Local environment files
+*.log
+*.tmp
+*.bak

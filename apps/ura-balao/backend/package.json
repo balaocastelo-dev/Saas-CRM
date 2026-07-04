@@ -1,0 +1,20 @@
+{
+  "name": "ura-ativa-balao-backend",
+  "version": "1.0.0",
+  "description": "Backend para URA Ativa Balão da Informática Castelo",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
