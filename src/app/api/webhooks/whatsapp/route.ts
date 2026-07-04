@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getWhatsAppPhoneCandidates, normalizeWhatsAppPhone } from '@/lib/utils'
 import type { WebhookMessage, WebhookStatusUpdate } from '@/lib/whatsapp/client'
 
 export const dynamic = 'force-dynamic'
@@ -76,23 +77,29 @@ export async function POST(request: NextRequest) {
 }
 
 async function processIncomingMessage(supabaseAdmin: SupabaseAdminClient, msg: WebhookMessage) {
-  const phone = msg.from
+  const phone = normalizeWhatsAppPhone(msg.from)
+  const phoneCandidates = getWhatsAppPhoneCandidates(phone)
   const text = msg.text?.body?.trim().toUpperCase() || ''
   const content = msg.text?.body || ''
 
   // Find or create customer
-  const { data: customer } = await supabaseAdmin
+  const { data: customerMatches } = await supabaseAdmin
     .from('customers')
     .select('id, name, status, accepted_marketing')
-    .eq('phone_normalized', `55${phone}`)
-    .maybeSingle()
+    .in('phone_normalized', phoneCandidates)
+    .limit(1)
+
+  const customer = customerMatches?.[0] || null
 
   // Find or create conversation
-  let { data: conversation } = await supabaseAdmin
+  const { data: conversationMatches } = await supabaseAdmin
     .from('whatsapp_conversations')
-    .select('id, unread_count')
-    .eq('phone', phone)
-    .maybeSingle()
+    .select('id, phone, unread_count')
+    .in('phone', phoneCandidates)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+
+  let conversation = conversationMatches?.[0] || null
 
   if (!conversation) {
     const { data: newConv } = await supabaseAdmin
@@ -104,14 +111,15 @@ async function processIncomingMessage(supabaseAdmin: SupabaseAdminClient, msg: W
         last_message_at: new Date().toISOString(),
         unread_count: 1,
       })
-      .select('id, unread_count')
+      .select('id, phone, unread_count')
       .single()
     conversation = newConv
   } else {
-    // Update unread count
+    // Canonicaliza o número da conversa a partir do payload da Meta.
     await supabaseAdmin
       .from('whatsapp_conversations')
       .update({
+        phone,
         last_message_at: new Date().toISOString(),
         unread_count: (conversation.unread_count || 0) + 1,
         customer_id: customer?.id || null,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import { normalizeWhatsAppPhone } from '@/lib/utils'
 import { sendTextMessage } from '@/lib/whatsapp/client'
 
 const sendMessageSchema = z.object({
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     const { data: conversation, error: conversationError } = await supabase
       .from('whatsapp_conversations')
-      .select('id, phone, last_message_at')
+      .select('id, phone, last_message_at, customer:customers(phone_normalized)')
       .eq('id', conversationId)
       .maybeSingle()
 
@@ -48,8 +49,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const recipient = normalizeWhatsAppPhone(
+      conversation.phone || conversation.customer?.[0]?.phone_normalized || ''
+    )
+
+    if (!recipient) {
+      return NextResponse.json({ error: 'Telefone do destinatário inválido.' }, { status: 400 })
+    }
+
     const result = await sendTextMessage({
-      to: conversation.phone,
+      to: recipient,
       text,
     })
 

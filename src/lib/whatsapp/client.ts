@@ -1,4 +1,7 @@
 // WhatsApp Cloud API client — Meta Official API
+import crypto from 'node:crypto'
+import { normalizeWhatsAppPhone } from '@/lib/utils'
+
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v19.0'
 
 function getAccessToken(): string {
@@ -63,15 +66,20 @@ export async function sendTemplateMessage({
 }: SendTemplateParams): Promise<{ success: boolean; data?: WhatsAppApiResponse; error?: string }> {
   const accessToken = getAccessToken()
   const phoneNumberId = getPhoneNumberId()
+  const recipient = normalizeWhatsAppPhone(to)
 
   if (!accessToken || !phoneNumberId) {
     return { success: false, error: 'WhatsApp não configurado. Configure o token e o ID do número nas configurações.' }
   }
 
+  if (!recipient) {
+    return { success: false, error: 'Telefone do destinatário inválido.' }
+  }
+
   try {
     const payload = {
       messaging_product: 'whatsapp',
-      to,
+      to: recipient,
       type: 'template',
       template: {
         name: templateName,
@@ -120,16 +128,21 @@ export async function sendTextMessage({
 }: SendTextMessageParams): Promise<{ success: boolean; data?: WhatsAppApiResponse; error?: string }> {
   const accessToken = getAccessToken()
   const phoneNumberId = getPhoneNumberId()
+  const recipient = normalizeWhatsAppPhone(to)
 
   if (!accessToken || !phoneNumberId) {
     return { success: false, error: 'WhatsApp não configurado. Configure o token e o ID do número nas configurações.' }
+  }
+
+  if (!recipient) {
+    return { success: false, error: 'Telefone do destinatário inválido.' }
   }
 
   try {
     const payload = {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
-      to,
+      to: recipient,
       type: 'text',
       text: {
         preview_url: previewUrl,
@@ -201,7 +214,6 @@ export function verifyWebhookSignature(
   appSecret: string
 ): boolean {
   try {
-    const crypto = require('crypto')
     const expectedSignature = `sha256=${crypto
       .createHmac('sha256', appSecret)
       .update(payload)

@@ -5,19 +5,68 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+function digitsOnly(phone: string): string {
+  return phone.replace(/\D/g, '')
+}
+
+export function normalizeWhatsAppPhone(phone: string): string {
+  const clean = digitsOnly(phone)
+
+  if (!clean) return ''
+  if (clean.startsWith('00')) return clean.slice(2)
+
+  return clean
+}
+
+export function getWhatsAppPhoneCandidates(phone: string): string[] {
+  const normalized = normalizeWhatsAppPhone(phone)
+
+  if (!normalized) return []
+
+  const candidates = new Set<string>([normalized])
+
+  // Compatibilidade com dados antigos que prefixavam 55 em números já
+  // internacionalizados, como o sandbox +1 da Meta.
+  if (!normalized.startsWith('55') && normalized.length >= 10) {
+    candidates.add(`55${normalized}`)
+  }
+
+  if (normalized.startsWith('55') && normalized.length > 11) {
+    candidates.add(normalized.slice(2))
+  }
+
+  return Array.from(candidates)
+}
+
 export function formatPhone(phone: string): string {
-  const clean = phone.replace(/\D/g, '')
+  const clean = normalizeWhatsAppPhone(phone)
+
+  if (clean.startsWith('55') && clean.length === 13) {
+    const local = clean.slice(2)
+    return `(${local.slice(0, 2)}) ${local.slice(2, 7)}-${local.slice(7)}`
+  }
+
+  if (clean.startsWith('55') && clean.length === 12) {
+    const local = clean.slice(2)
+    return `(${local.slice(0, 2)}) ${local.slice(2, 6)}-${local.slice(6)}`
+  }
+
+  if (clean.startsWith('1') && clean.length === 11) {
+    return `+1 (${clean.slice(1, 4)}) ${clean.slice(4, 7)}-${clean.slice(7)}`
+  }
+
   if (clean.length === 11) {
     return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`
   }
   if (clean.length === 10) {
     return `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`
   }
-  return phone
+
+  return clean ? `+${clean}` : phone
 }
 
 export function normalizePhone(phone: string): string {
-  const clean = phone.replace(/\D/g, '')
+  const clean = digitsOnly(phone)
   // Se já tem 55 na frente
   if (clean.startsWith('55') && clean.length >= 12) return clean
   // Adicionar código do Brasil

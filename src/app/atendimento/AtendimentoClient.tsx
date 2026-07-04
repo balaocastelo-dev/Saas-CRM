@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useOptimistic, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Loader2, MessageSquare, Send, Search, CheckCheck, Check, Clock, User } from 'lucide-react'
 import { formatPhone } from '@/lib/utils'
 
@@ -27,26 +28,65 @@ function MessageTime({ value }: { value: string }) {
   const [label, setLabel] = useState(() => formatMessageTime(value, 'UTC'))
 
   useEffect(() => {
-    setLabel(formatMessageTime(value))
+    const frame = window.requestAnimationFrame(() => {
+      setLabel(formatMessageTime(value))
+    })
+
+    return () => window.cancelAnimationFrame(frame)
   }, [value])
 
   return <span suppressHydrationWarning>{label}</span>
 }
 
 export default function AtendimentoClient({ conversations }: { conversations: Conversation[] }) {
-  const [conversationList, setConversationList] = useState(conversations)
+  const router = useRouter()
   const [selectedId, setSelectedId] = useState<string | null>(conversations[0]?.id || null)
   const [message, setMessage] = useState('')
   const [search, setSearch] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
+  const [conversationList, appendOptimisticMessage] = useOptimistic(
+    conversations,
+    (
+      currentConversations,
+      action: {
+        conversationId: string
+        message: {
+          content: string
+          direction: string
+          created_at: string
+          status: string
+        }
+      }
+    ) =>
+      currentConversations.map(conv =>
+        conv.id === action.conversationId
+          ? {
+              ...conv,
+              status: 'em_atendimento',
+              last_message_at: action.message.created_at,
+              messages: [...(conv.messages || []), action.message],
+            }
+          : conv
+      )
+  )
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        router.refresh()
+      }
+    }, 5000)
+
+    return () => window.clearInterval(interval)
+  }, [router])
 
   const filtered = conversationList.filter(c =>
     c.customer?.name?.toLowerCase().includes(search.toLowerCase()) ||
     c.phone?.includes(search)
   )
 
-  const selected = conversationList.find(c => c.id === selectedId)
+  const selected = conversationList.find(c => c.id === selectedId) || conversationList[0]
   const messages = selected?.messages || []
 
   const statusIcon = (status: string) => {
@@ -87,18 +127,10 @@ export default function AtendimentoClient({ conversations }: { conversations: Co
         status: string
       }
 
-      setConversationList(prev =>
-        prev.map(conv =>
-          conv.id === selected.id
-            ? {
-                ...conv,
-                status: 'em_atendimento',
-                last_message_at: createdMessage.created_at,
-                messages: [...(conv.messages || []), createdMessage],
-              }
-            : conv
-        )
-      )
+      appendOptimisticMessage({
+        conversationId: selected.id,
+        message: createdMessage,
+      })
       setMessage('')
     } catch (error) {
       setSendError(error instanceof Error ? error.message : 'Erro ao enviar mensagem.')
@@ -188,7 +220,7 @@ export default function AtendimentoClient({ conversations }: { conversations: Co
                 {selected.customer?.name || formatPhone(selected.phone)}
               </p>
               <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                {formatPhone(selected.customer?.phone_normalized || selected.phone)}
+                {formatPhone(selected.phone)}
               </p>
             </div>
             <div className="ml-auto flex items-center gap-2">
