@@ -6,9 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "whatsapp-extraction-service": "tsx scripts/whatsapp-extraction-service.ts"
   },
   "dependencies": {
+    "@next/env": "^16.2.10",
     "@hookform/resolvers": "^5.4.0",
     "@radix-ui/react-avatar": "^1.2.1",
     "@radix-ui/react-checkbox": "^1.3.6",
@@ -50,6 +52,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
+    "tsx": "^4.20.6",
     "typescript": "^5"
   }
 }

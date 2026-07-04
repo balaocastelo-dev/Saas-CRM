@@ -30,6 +30,8 @@ export type WhatsAppExtractionSnapshot = {
   status: WhatsAppExtractionStatus
   isSupported: boolean
   isConnected: boolean
+  serviceMode?: 'embedded' | 'remote'
+  serviceLabel?: string | null
   qrCodeDataUrl: string | null
   qrUpdatedAt: string | null
   lastSyncAt: string | null

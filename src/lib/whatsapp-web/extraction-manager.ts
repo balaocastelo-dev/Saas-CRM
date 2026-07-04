@@ -2,12 +2,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import QRCode from 'qrcode'
 import { Client, LocalAuth, type Chat, type Contact } from 'whatsapp-web.js'
-import type { ExportableContact } from '@/lib/contact-exports'
-import { createAdminClient } from '@/lib/supabase/admin'
+import type { ExportableContact } from '../contact-exports'
+import { createAdminClient } from '../supabase/admin'
 import {
   getWhatsAppPhoneCandidates,
   normalizeWhatsAppPhone,
-} from '@/lib/utils'
+} from '../utils'
 import type {
   ExtractedWhatsAppContact,
   WhatsAppExtractionSnapshot,
@@ -62,6 +62,8 @@ function createInitialSnapshot(): WhatsAppExtractionSnapshot {
     status: process.env.VERCEL ? 'unsupported' : 'idle',
     isSupported: !process.env.VERCEL,
     isConnected: false,
+    serviceMode: 'embedded',
+    serviceLabel: 'Servidor Node local',
     qrCodeDataUrl: null,
     qrUpdatedAt: null,
     lastSyncAt: null,
@@ -281,6 +283,8 @@ class WhatsAppExtractionManager {
       isSupported: !process.env.VERCEL,
       status: process.env.VERCEL ? 'unsupported' : 'idle',
       isConnected: false,
+      serviceMode: 'embedded',
+      serviceLabel: 'Servidor Node local',
       qrCodeDataUrl: null,
       qrUpdatedAt: null,
       progress: null,

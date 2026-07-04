@@ -253,6 +253,8 @@ export default function ContactExtractionClient({ initialContacts }: ContactExtr
   const whatsappMatchedInCrm = whatsappContacts.filter(contact => contact.hasCrmMatch).length
   const sessionStatus = getStatusMeta(session?.status)
   const filenameBase = source === 'crm' ? 'contatos-crm' : 'contatos-whatsapp-web'
+  const serviceLabel = session?.serviceLabel || 'Servidor Node local'
+  const isRemoteService = session?.serviceMode === 'remote'
 
   async function handleSessionAction(
     action: 'start' | 'sync' | 'logout',
@@ -327,8 +329,11 @@ export default function ContactExtractionClient({ initialContacts }: ContactExtr
             <div>
               <h2 className="text-lg font-semibold text-white">Sessão WhatsApp Web</h2>
               <p className="text-sm mt-1 leading-6" style={{ color: 'var(--text-muted)' }}>
-                O QR Code e a automação rodam no servidor Node local desta instalação. A sincronização tenta carregar
-                todo o histórico disponível do chat e enriquece cidade e etiquetas com os dados já existentes no CRM.
+                {isRemoteService
+                  ? 'O CRM está falando com um serviço Node local dedicado via API. O QR Code e a automação ficam fora da Vercel, mantendo a sessão viva no Windows.'
+                  : 'O QR Code e a automação rodam no servidor Node local desta instalação.'}{' '}
+                A sincronização tenta carregar todo o histórico disponível do chat e enriquece cidade e etiquetas com
+                os dados já existentes no CRM.
               </p>
             </div>
 
@@ -341,6 +346,16 @@ export default function ContactExtractionClient({ initialContacts }: ContactExtr
               }}>
               {sessionLoading ? 'Consultando sessão...' : sessionStatus.label}
             </div>
+          </div>
+
+          <div
+            className="rounded-lg border px-3 py-3 text-sm"
+            style={{
+              borderColor: 'rgba(148,163,184,0.25)',
+              background: 'rgba(15,23,42,0.35)',
+              color: '#cbd5e1',
+            }}>
+            Serviço ativo: <strong>{serviceLabel}</strong>
           </div>
 
           <div className="flex flex-wrap gap-2">
