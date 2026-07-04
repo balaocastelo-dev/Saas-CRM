@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import ThemeToggle from './ThemeToggle'
 
 const navSections = [
   {
@@ -99,6 +100,7 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="border-t p-3" style={{ borderColor: 'var(--border-color)' }}>
+        <ThemeToggle />
         <button onClick={handleLogout}
           className="sidebar-link w-full hover:!text-red-400 hover:!bg-red-500/10">
           <LogOut size={16} />
