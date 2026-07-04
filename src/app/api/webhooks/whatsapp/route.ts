@@ -1,0 +1,292 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { 
+  verifyWebhookSignature, 
+  parseWebhookPayload, 
+  type WebhookPayload 
+} from '@/lib/whatsapp/client'
+import { createClient } from '@supabase/supabase-js'
+
+// Supabase admin client (service role key)
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { persistSession: false } }
+)
+
+// OPT-OUT keywords
+const OPT_OUT_KEYWORDS = ['SAIR', 'PARAR', 'CANCELAR', 'STOP', 'DESINSCREVER']
+// OPT-IN keywords (interested)
+const OPT_IN_KEYWORDS = ['QUERO', 'SIM', 'OK', 'ACEITO']
+
+/**
+ * GET — Verificação do webhook pela Meta
+ */
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams
+  const mode = searchParams.get('hub.mode')
+  const token = searchParams.get('hub.verify_token')
+  const challenge = searchParams.get('hub.challenge')
+
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'balao_webhook_verify_2024'
+
+  if (mode === 'subscribe' && token === verifyToken) {
+    console.log('[Webhook] Verificação bem-sucedida')
+    return new NextResponse(challenge, { status: 200 })
+  }
+
+  return NextResponse.json({ error: 'Token de verificação inválido' }, { status: 403 })
+}
+
+/**
+ * POST — Receber eventos do WhatsApp
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.text()
+    
+    // Verificar assinatura da Meta
+    const signature = request.headers.get('x-hub-signature-256') || ''
+    const appSecret = process.env.WHATSAPP_APP_SECRET || ''
+
+    if (appSecret && signature) {
+      const isValid = verifyWebhookSignature(body, signature, appSecret)
+      if (!isValid) {
+        console.error('[Webhook] Assinatura inválida')
+        return NextResponse.json({ error: 'Assinatura inválida' }, { status: 401 })
+      }
+    }
+
+    const payload = JSON.parse(body) as WebhookPayload
+    const { messages, statuses } = parseWebhookPayload(payload)
+
+    // Process incoming messages
+    for (const msg of messages) {
+      await processIncomingMessage(msg)
+    }
+
+    // Process status updates
+    for (const status of statuses) {
+      await processStatusUpdate(status)
+    }
+
+    return NextResponse.json({ status: 'ok' })
+  } catch (error) {
+    console.error('[Webhook] Erro:', error)
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+  }
+}
+
+async function processIncomingMessage(msg: any) {
+  const phone = msg.from
+  const text = msg.text?.body?.trim().toUpperCase() || ''
+  const content = msg.text?.body || ''
+
+  // Find or create customer
+  const { data: customer } = await supabaseAdmin
+    .from('customers')
+    .select('id, name, status, accepted_marketing')
+    .eq('phone_normalized', `55${phone}`)
+    .maybeSingle()
+
+  // Find or create conversation
+  let { data: conversation } = await supabaseAdmin
+    .from('whatsapp_conversations')
+    .select('id, unread_count')
+    .eq('phone', phone)
+    .maybeSingle()
+
+  if (!conversation) {
+    const { data: newConv } = await supabaseAdmin
+      .from('whatsapp_conversations')
+      .insert({
+        phone,
+        customer_id: customer?.id || null,
+        status: 'aberto',
+        last_message_at: new Date().toISOString(),
+        unread_count: 1,
+      })
+      .select('id, unread_count')
+      .single()
+    conversation = newConv
+  } else {
+    // Update unread count
+    await supabaseAdmin
+      .from('whatsapp_conversations')
+      .update({
+        last_message_at: new Date().toISOString(),
+        unread_count: (conversation.unread_count || 0) + 1,
+        customer_id: customer?.id || null,
+      })
+      .eq('id', conversation.id)
+  }
+
+  // Save message
+  await supabaseAdmin.from('whatsapp_messages').insert({
+    conversation_id: conversation?.id,
+    wamid: msg.id,
+    direction: 'inbound',
+    message_type: msg.type || 'text',
+    content,
+    status: 'delivered',
+  })
+
+  // Handle OPT-OUT
+  if (OPT_OUT_KEYWORDS.some(kw => text === kw)) {
+    await supabaseAdmin
+      .from('customers')
+      .update({ accepted_marketing: false, status: 'opt-out' })
+      .eq('phone_normalized', `55${phone}`)
+
+    // Log audit
+    await supabaseAdmin.from('audit_logs').insert({
+      action: 'OPT_OUT',
+      entity_type: 'customer',
+      entity_id: customer?.id,
+      new_values: { keyword: text, phone },
+    })
+
+    console.log(`[Webhook] Opt-out processado para ${phone}`)
+    return
+  }
+
+  // Handle OPT-IN / QUERO — create opportunity
+  if (OPT_IN_KEYWORDS.some(kw => text === kw) && customer) {
+    const { data: existingOpp } = await supabaseAdmin
+      .from('opportunities')
+      .select('id')
+      .eq('customer_id', customer.id)
+      .eq('stage', 'novo_lead')
+      .maybeSingle()
+
+    if (!existingOpp) {
+      await supabaseAdmin.from('opportunities').insert({
+        customer_id: customer.id,
+        title: `Lead via WhatsApp — ${customer.name}`,
+        stage: 'novo_lead',
+        origin: 'WhatsApp',
+        notes: `Cliente respondeu "${text}" via campanha WhatsApp`,
+      })
+      console.log(`[Webhook] Oportunidade criada para ${customer.name}`)
+    }
+  }
+
+  // AI auto-response (if enabled)
+  const { data: aiSetting } = await supabaseAdmin
+    .from('settings')
+    .select('value')
+    .eq('key', 'ai_enabled')
+    .maybeSingle()
+
+  if (aiSetting?.value === 'true') {
+    const aiResponse = getAIResponse(content)
+    if (aiResponse) {
+      const { sendTextMessage } = await import('@/lib/whatsapp/client')
+      await sendTextMessage({ to: phone, text: aiResponse })
+      
+      await supabaseAdmin.from('whatsapp_messages').insert({
+        conversation_id: conversation?.id,
+        direction: 'outbound',
+        message_type: 'text',
+        content: aiResponse,
+        status: 'sent',
+        is_ai_response: true,
+      })
+    }
+  }
+}
+
+async function processStatusUpdate(statusUpdate: any) {
+  const { id: wamid, status } = statusUpdate
+  
+  // Map Meta status to our status
+  const statusMap: Record<string, string> = {
+    sent: 'sent',
+    delivered: 'delivered',
+    read: 'read',
+    failed: 'failed',
+  }
+
+  const dbStatus = statusMap[status]
+  if (!dbStatus) return
+
+  await supabaseAdmin
+    .from('whatsapp_messages')
+    .update({ status: dbStatus, updated_at: new Date().toISOString() })
+    .eq('wamid', wamid)
+
+  // Update campaign recipient if applicable
+  const { data: message } = await supabaseAdmin
+    .from('whatsapp_messages')
+    .select('id, campaign_id')
+    .eq('wamid', wamid)
+    .maybeSingle()
+
+  if (message?.campaign_id) {
+    await supabaseAdmin
+      .from('campaign_recipients')
+      .update({ status: dbStatus })
+      .eq('message_id', message.id)
+
+    // Update campaign counters
+    if (status === 'delivered') {
+      await supabaseAdmin.rpc('increment_campaign_counter', {
+        p_campaign_id: message.campaign_id,
+        p_field: 'delivered_count'
+      })
+    } else if (status === 'read') {
+      await supabaseAdmin.rpc('increment_campaign_counter', {
+        p_campaign_id: message.campaign_id,
+        p_field: 'read_count'
+      })
+    }
+  }
+}
+
+/**
+ * Simple AI knowledge base for common questions
+ */
+function getAIResponse(text: string): string | null {
+  const lower = text.toLowerCase()
+
+  if (lower.includes('endereço') || lower.includes('onde fica') || lower.includes('localização')) {
+    return '📍 Estamos na Av. Anchieta, 789 – Campinas/SP. Fácil acesso e estacionamento no local!'
+  }
+
+  if (lower.includes('horário') || lower.includes('funciona') || lower.includes('aberto')) {
+    return '🕐 Nosso horário de funcionamento é de segunda a sábado, das 08h às 18h. Domingos fechado.'
+  }
+
+  if (lower.includes('pagamento') || lower.includes('pagar') || lower.includes('forma de pag')) {
+    return '💳 Aceitamos: cartão de crédito (até 12x), débito, PIX, boleto e dinheiro. Consulte condições com nosso vendedor!'
+  }
+
+  if (lower.includes('garantia')) {
+    return '🛡️ Todos os produtos têm garantia do fabricante. Serviços têm garantia de 90 dias. Para mais detalhes, fale com nossa equipe!'
+  }
+
+  if (lower.includes('assistência') || lower.includes('conserto') || lower.includes('reparo') || lower.includes('técnico')) {
+    return '🔧 Fazemos assistência técnica em notebooks, PCs, impressoras e celulares. Traga seu equipamento ou agende uma visita. Digite ATENDENTE para falar com nossa equipe!'
+  }
+
+  if (lower.includes('notebook') || lower.includes('computador') || lower.includes('pc')) {
+    return '💻 Temos uma linha completa de notebooks e PCs para todos os perfis e orçamentos. Para ver nossas opções, responda ATENDENTE e fale com um de nossos vendedores!'
+  }
+
+  if (lower.includes('gamer') || lower.includes('placa de vídeo') || lower.includes('gpu')) {
+    return '🎮 Somos especialistas em equipamentos gamer! Placas de vídeo, processadores, memórias e muito mais. Responda ATENDENTE para falar com nosso especialista gamer!'
+  }
+
+  if (lower.includes('orçamento') || lower.includes('preço') || lower.includes('valor') || lower.includes('quanto')) {
+    return '💰 Para orçamentos personalizados, responda ATENDENTE e um de nossos vendedores vai te atender! Não inventamos preços — cada configuração é consultada para te dar o melhor valor.'
+  }
+
+  if (lower.includes('atendente') || lower.includes('vendedor') || lower.includes('humano') || lower.includes('pessoa')) {
+    return '👋 Perfeito! Vou transferir você para um de nossos atendentes. Em instantes alguém vai te responder. Obrigado pela paciência!'
+  }
+
+  if (lower.includes('oi') || lower.includes('olá') || lower.includes('ola') || lower.includes('bom dia') || lower.includes('boa tarde') || lower.includes('boa noite')) {
+    return '👋 Olá! Bem-vindo à Balão da Informática Castelo! Como posso te ajudar hoje?\n\n• 📍 Endereço e horário\n• 💻 Produtos\n• 🔧 Assistência técnica\n• 💳 Formas de pagamento\n• 👤 Falar com atendente'
+  }
+
+  return null
+}
