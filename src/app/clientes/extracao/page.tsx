@@ -6,6 +6,7 @@ import ContactExtractionClient from './ContactExtractionClient'
 import type { ExportableContact } from '@/lib/contact-exports'
 
 export const metadata: Metadata = { title: 'Extração de Contatos' }
+export const dynamic = 'force-dynamic'
 
 type CustomerTagRelation = {
   tag?: {
@@ -88,7 +89,8 @@ export default async function ClientesExtracaoPage() {
           </div>
           <h1 className="page-title">Extração de Contatos</h1>
           <p className="page-subtitle">
-            Exporte a base atual do CRM em CSV, JSON, VCF, XLS ou XLSX e gere PDF a partir da visualização filtrada.
+            Exporte a base atual do CRM ou abra uma sessão do WhatsApp Web com QR Code para sincronizar e exportar os
+            contatos extraídos.
           </p>
         </div>
       </div>
