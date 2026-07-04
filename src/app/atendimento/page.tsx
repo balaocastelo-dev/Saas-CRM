@@ -12,7 +12,7 @@ type ConversationRow = {
   unread_count: number
   last_message_at: string | null
   customer?: { name: string; phone_normalized: string } | Array<{ name: string; phone_normalized: string }>
-  assigned_to?: { full_name: string } | Array<{ full_name: string }>
+  assigned_to?: { id: string; full_name: string } | Array<{ id: string; full_name: string }>
   messages?: Array<{ content: string; direction: string; created_at: string; status: string }>
   [key: string]: unknown
 }
@@ -24,8 +24,27 @@ type ConversationView = {
   unread_count: number
   last_message_at: string
   customer?: { name: string; phone_normalized: string }
-  assigned_to?: { full_name: string }
+  assigned_to?: { id: string; full_name: string }
   messages: Array<{ content: string; direction: string; created_at: string; status: string }>
+}
+
+type QuickReply = {
+  id: string
+  shortcut: string
+  title: string
+  content: string
+}
+
+type AssigneeOption = {
+  id: string
+  full_name: string | null
+  user_role: string
+}
+
+type ApprovedTemplate = {
+  id: string
+  name: string
+  variables: string[] | null
 }
 
 function pickLatestConversation(current: ConversationRow | undefined, candidate: ConversationRow) {
@@ -123,16 +142,38 @@ function firstDefined<T>(values: Array<T | undefined>): T | undefined {
 export default async function AtendimentoPage() {
   const supabase = await createClient()
 
-  const { data: conversations } = await supabase
-    .from('whatsapp_conversations')
-    .select(`
-      *,
-      customer:customers(name, phone_normalized),
-      assigned_to:profiles!assigned_to(full_name),
-      messages:whatsapp_messages(content, direction, created_at, status)
-    `)
-    .order('last_message_at', { ascending: false })
-    .limit(200)
+  const [
+    { data: conversations },
+    { data: quickReplies },
+    { data: assignees },
+    { data: approvedTemplates },
+  ] = await Promise.all([
+    supabase
+      .from('whatsapp_conversations')
+      .select(`
+        *,
+        customer:customers(name, phone_normalized),
+        assigned_to:profiles!assigned_to(id, full_name),
+        messages:whatsapp_messages(content, direction, created_at, status)
+      `)
+      .order('last_message_at', { ascending: false })
+      .limit(200),
+    supabase
+      .from('quick_replies')
+      .select('id, shortcut, title, content')
+      .order('shortcut', { ascending: true }),
+    supabase
+      .from('profiles')
+      .select('id, full_name, user_role')
+      .eq('is_active', true)
+      .in('user_role', ['admin', 'atendente', 'vendedor'])
+      .order('full_name', { ascending: true }),
+    supabase
+      .from('templates')
+      .select('id, name, variables')
+      .eq('status', 'approved')
+      .order('name', { ascending: true }),
+  ])
 
   const visibleConversations = dedupeConversations((conversations || []) as ConversationRow[]).slice(0, 50)
 
@@ -145,7 +186,12 @@ export default async function AtendimentoPage() {
         </div>
       </div>
       <div className="flex-1 overflow-hidden">
-        <AtendimentoClient conversations={visibleConversations} />
+        <AtendimentoClient
+          conversations={visibleConversations}
+          quickReplies={(quickReplies || []) as QuickReply[]}
+          assignees={(assignees || []) as AssigneeOption[]}
+          approvedTemplates={(approvedTemplates || []) as ApprovedTemplate[]}
+        />
       </div>
     </div>
   )

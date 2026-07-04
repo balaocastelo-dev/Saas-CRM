@@ -1,9 +1,21 @@
 'use client'
 
-import { useEffect, useOptimistic, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, MessageSquare, Send, Search, CheckCheck, Check, Clock, User } from 'lucide-react'
-import { formatPhone } from '@/lib/utils'
+import {
+  Check,
+  CheckCheck,
+  Clock,
+  Loader2,
+  MessageSquare,
+  Plus,
+  Search,
+  Send,
+  Sparkles,
+  User,
+  X,
+} from 'lucide-react'
+import { formatPhone, normalizeWhatsAppPhone } from '@/lib/utils'
 
 interface Conversation {
   id: string
@@ -12,8 +24,34 @@ interface Conversation {
   unread_count: number
   last_message_at: string
   customer?: { name: string; phone_normalized: string }
-  assigned_to?: { full_name: string }
+  assigned_to?: { id?: string; full_name: string }
   messages?: Array<{ content: string; direction: string; created_at: string; status: string }>
+}
+
+interface QuickReply {
+  id: string
+  shortcut: string
+  title: string
+  content: string
+}
+
+interface AssigneeOption {
+  id: string
+  full_name: string | null
+  user_role: string
+}
+
+interface ApprovedTemplate {
+  id: string
+  name: string
+  variables: string[] | null
+}
+
+type AtendimentoClientProps = {
+  conversations: Conversation[]
+  quickReplies: QuickReply[]
+  assignees: AssigneeOption[]
+  approvedTemplates: ApprovedTemplate[]
 }
 
 function formatMessageTime(value: string, timeZone?: string) {
@@ -38,38 +76,42 @@ function MessageTime({ value }: { value: string }) {
   return <span suppressHydrationWarning>{label}</span>
 }
 
-export default function AtendimentoClient({ conversations }: { conversations: Conversation[] }) {
+function getConversationPreview(conversation: Conversation) {
+  return conversation.customer?.name || formatPhone(conversation.phone)
+}
+
+export default function AtendimentoClient({
+  conversations,
+  quickReplies,
+  assignees,
+  approvedTemplates,
+}: AtendimentoClientProps) {
   const router = useRouter()
+  const [conversationList, setConversationList] = useState(conversations)
   const [selectedId, setSelectedId] = useState<string | null>(conversations[0]?.id || null)
   const [message, setMessage] = useState('')
   const [search, setSearch] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
-  const [conversationList, appendOptimisticMessage] = useOptimistic(
-    conversations,
-    (
-      currentConversations,
-      action: {
-        conversationId: string
-        message: {
-          content: string
-          direction: string
-          created_at: string
-          status: string
-        }
-      }
-    ) =>
-      currentConversations.map(conv =>
-        conv.id === action.conversationId
-          ? {
-              ...conv,
-              status: 'em_atendimento',
-              last_message_at: action.message.created_at,
-              messages: [...(conv.messages || []), action.message],
-            }
-          : conv
-      )
-  )
+  const [assigning, setAssigning] = useState(false)
+  const [assignmentError, setAssignmentError] = useState('')
+  const [showStartForm, setShowStartForm] = useState(false)
+  const [startPhone, setStartPhone] = useState('')
+  const [startCustomerName, setStartCustomerName] = useState('')
+  const [startTemplateId, setStartTemplateId] = useState(approvedTemplates[0]?.id || '')
+  const [startTemplateVariables, setStartTemplateVariables] = useState<Record<string, string>>({})
+  const [startingConversation, setStartingConversation] = useState(false)
+  const [startError, setStartError] = useState('')
+  const [startSuccess, setStartSuccess] = useState('')
+
+  useEffect(() => {
+    setConversationList(conversations)
+    setSelectedId(current =>
+      current && conversations.some(conversation => conversation.id === current)
+        ? current
+        : conversations[0]?.id || null
+    )
+  }, [conversations])
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -81,13 +123,33 @@ export default function AtendimentoClient({ conversations }: { conversations: Co
     return () => window.clearInterval(interval)
   }, [router])
 
-  const filtered = conversationList.filter(c =>
-    c.customer?.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.phone?.includes(search)
+  const filtered = useMemo(
+    () =>
+      conversationList.filter(conversation =>
+        conversation.customer?.name?.toLowerCase().includes(search.toLowerCase()) ||
+        conversation.phone?.includes(search)
+      ),
+    [conversationList, search]
   )
 
-  const selected = conversationList.find(c => c.id === selectedId) || conversationList[0]
+  const selected = conversationList.find(conversation => conversation.id === selectedId) || conversationList[0]
   const messages = selected?.messages || []
+  const selectedStartTemplate = useMemo(
+    () => approvedTemplates.find(template => template.id === startTemplateId) || null,
+    [approvedTemplates, startTemplateId]
+  )
+
+  useEffect(() => {
+    const nextVariables = (selectedStartTemplate?.variables || []).reduce<Record<string, string>>(
+      (accumulator, variableName) => {
+        accumulator[variableName] = startTemplateVariables[variableName] || ''
+        return accumulator
+      },
+      {}
+    )
+
+    setStartTemplateVariables(nextVariables)
+  }, [selectedStartTemplate])
 
   const statusIcon = (status: string) => {
     if (status === 'read') return <CheckCheck size={13} className="text-blue-400" />
@@ -127,10 +189,18 @@ export default function AtendimentoClient({ conversations }: { conversations: Co
         status: string
       }
 
-      appendOptimisticMessage({
-        conversationId: selected.id,
-        message: createdMessage,
-      })
+      setConversationList(currentConversations =>
+        currentConversations.map(conversation =>
+          conversation.id === selected.id
+            ? {
+                ...conversation,
+                status: 'em_atendimento',
+                last_message_at: createdMessage.created_at,
+                messages: [...(conversation.messages || []), createdMessage],
+              }
+            : conversation
+        )
+      )
       setMessage('')
     } catch (error) {
       setSendError(error instanceof Error ? error.message : 'Erro ao enviar mensagem.')
@@ -139,59 +209,284 @@ export default function AtendimentoClient({ conversations }: { conversations: Co
     }
   }
 
+  async function handleAssignConversation(assignedTo: string) {
+    if (!selected || assigning) return
+
+    setAssigning(true)
+    setAssignmentError('')
+
+    try {
+      const response = await fetch('/api/atendimento/assign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          conversationId: selected.id,
+          assignedTo: assignedTo || null,
+        }),
+      })
+
+      const payload = await response.json()
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Não foi possível atribuir a conversa.')
+      }
+
+      const assignedProfile = Array.isArray(payload.conversation?.assigned_to)
+        ? payload.conversation.assigned_to[0]
+        : payload.conversation?.assigned_to
+
+      setConversationList(currentConversations =>
+        currentConversations.map(conversation =>
+          conversation.id === selected.id
+            ? {
+                ...conversation,
+                assigned_to: assignedProfile
+                  ? {
+                      id: assignedProfile.id,
+                      full_name: assignedProfile.full_name,
+                    }
+                  : undefined,
+              }
+            : conversation
+        )
+      )
+    } catch (error) {
+      setAssignmentError(error instanceof Error ? error.message : 'Erro ao atribuir a conversa.')
+    } finally {
+      setAssigning(false)
+    }
+  }
+
+  async function handleStartConversation() {
+    if (!startPhone.trim() || !startTemplateId || startingConversation) {
+      return
+    }
+
+    setStartingConversation(true)
+    setStartError('')
+    setStartSuccess('')
+
+    try {
+      const response = await fetch('/api/atendimento/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phone: startPhone.trim(),
+          customerName: startCustomerName.trim() || undefined,
+          templateId: startTemplateId,
+          templateVariables: startTemplateVariables,
+        }),
+      })
+
+      const payload = await response.json()
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Não foi possível iniciar a conversa.')
+      }
+
+      const normalizedPhone = normalizeWhatsAppPhone(startPhone)
+      const optimisticConversation: Conversation = {
+        id: payload.conversationId,
+        phone: normalizedPhone,
+        status: 'aguardando',
+        unread_count: 0,
+        last_message_at: new Date().toISOString(),
+        customer: {
+          name: payload.customer?.name || startCustomerName.trim() || formatPhone(normalizedPhone),
+          phone_normalized: normalizedPhone,
+        },
+        messages: [],
+      }
+
+      setConversationList(currentConversations => {
+        if (currentConversations.some(conversation => conversation.id === optimisticConversation.id)) {
+          return currentConversations
+        }
+
+        return [optimisticConversation, ...currentConversations]
+      })
+      setSelectedId(payload.conversationId)
+      setShowStartForm(false)
+      setStartPhone('')
+      setStartCustomerName('')
+      setStartTemplateId(approvedTemplates[0]?.id || '')
+      setStartTemplateVariables({})
+      setStartSuccess(payload.message || 'Conversa iniciada com sucesso.')
+      router.refresh()
+    } catch (error) {
+      setStartError(error instanceof Error ? error.message : 'Erro ao iniciar conversa.')
+    } finally {
+      setStartingConversation(false)
+    }
+  }
+
+  function applyQuickReply(content: string) {
+    setMessage(currentMessage =>
+      currentMessage.trim() ? `${currentMessage.trim()}\n${content}` : content
+    )
+  }
+
   return (
     <div className="flex h-full overflow-hidden" style={{ borderTop: '1px solid var(--border-color)' }}>
-      {/* Conversations list */}
-      <div className="w-80 flex-shrink-0 flex flex-col border-r" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-sidebar)' }}>
-        <div className="p-3 border-b" style={{ borderColor: 'var(--border-color)' }}>
+      <div
+        className="w-80 flex-shrink-0 flex flex-col border-r"
+        style={{ borderColor: 'var(--border-color)', background: 'var(--bg-sidebar)' }}>
+        <div className="p-3 border-b space-y-3" style={{ borderColor: 'var(--border-color)' }}>
           <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
+            <Search
+              size={15}
+              className="absolute left-3 top-1/2 -translate-y-1/2"
+              style={{ color: 'var(--text-muted)' }}
+            />
             <input
-              type="search" className="search-input w-full"
+              type="search"
+              className="search-input w-full"
               placeholder="Buscar conversa..."
-              value={search} onChange={e => setSearch(e.target.value)} />
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+            />
           </div>
+
+          <button type="button" className="btn-secondary w-full" onClick={() => setShowStartForm(current => !current)}>
+            {showStartForm ? <X size={15} /> : <Plus size={15} />}
+            {showStartForm ? 'Fechar nova conversa' : 'Iniciar conversa'}
+          </button>
+
+          {showStartForm && (
+            <div
+              className="rounded-xl border p-3 space-y-3"
+              style={{
+                borderColor: 'var(--border-color)',
+                background: 'var(--bg-card)',
+              }}>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-white">Nova conversa segura</p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Usa apenas template aprovado pela Meta para iniciar atendimento em número não salvo.
+                </p>
+              </div>
+
+              <input
+                type="tel"
+                className="input"
+                placeholder="Telefone com DDI, ex: 5519999999999"
+                value={startPhone}
+                onChange={event => setStartPhone(event.target.value)}
+              />
+
+              <input
+                type="text"
+                className="input"
+                placeholder="Nome do cliente (opcional)"
+                value={startCustomerName}
+                onChange={event => setStartCustomerName(event.target.value)}
+              />
+
+              <select
+                className="select"
+                value={startTemplateId}
+                onChange={event => setStartTemplateId(event.target.value)}>
+                <option value="">Selecione um template aprovado...</option>
+                {approvedTemplates.map(template => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+
+              {(selectedStartTemplate?.variables || []).map(variableName => (
+                <div key={variableName} className="form-group">
+                  <label className="label">{variableName}</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={startTemplateVariables[variableName] || ''}
+                    onChange={event =>
+                      setStartTemplateVariables(current => ({
+                        ...current,
+                        [variableName]: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              ))}
+
+              {approvedTemplates.length === 0 && (
+                <p className="text-xs" style={{ color: '#fbbf24' }}>
+                  Nenhum template aprovado disponível. Cadastre e aprove um template na Meta antes de iniciar conversas
+                  proativas.
+                </p>
+              )}
+
+              {startError && <p className="text-xs text-red-400">{startError}</p>}
+              {startSuccess && <p className="text-xs text-green-400">{startSuccess}</p>}
+
+              <button
+                type="button"
+                className="btn-primary w-full"
+                disabled={!startPhone.trim() || !startTemplateId || startingConversation}
+                onClick={() => void handleStartConversation()}>
+                {startingConversation ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                Iniciar com template
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {filtered.map(conv => {
-            const lastMsg = conv.messages?.[conv.messages.length - 1]
-            const isSelected = conv.id === selectedId
+          {filtered.map(conversation => {
+            const lastMessage = conversation.messages?.[conversation.messages.length - 1]
+            const isSelected = conversation.id === selectedId
 
             return (
-              <button key={conv.id} onClick={() => setSelectedId(conv.id)}
+              <button
+                key={conversation.id}
+                onClick={() => setSelectedId(conversation.id)}
                 className="w-full text-left p-4 border-b transition-colors hover:bg-white/5"
                 style={{
                   borderColor: 'var(--border-color)',
                   background: isSelected ? 'rgba(220,38,38,0.08)' : undefined,
-                  borderLeft: isSelected ? '3px solid var(--brand-red)' : '3px solid transparent'
+                  borderLeft: isSelected ? '3px solid var(--brand-red)' : '3px solid transparent',
                 }}>
                 <div className="flex items-start gap-3">
                   <div className="avatar w-10 h-10 text-sm flex-shrink-0">
-                    {(conv.customer?.name || conv.phone)?.charAt(0).toUpperCase()}
+                    {getConversationPreview(conversation).charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
                       <p className="font-medium text-white text-sm truncate">
-                        {conv.customer?.name || formatPhone(conv.phone)}
+                        {getConversationPreview(conversation)}
                       </p>
-                      {lastMsg && (
+                      {lastMessage && (
                         <span className="text-xs flex-shrink-0 ml-1" style={{ color: 'var(--text-muted)' }}>
-                          <MessageTime value={lastMsg.created_at} />
+                          <MessageTime value={lastMessage.created_at} />
                         </span>
                       )}
                     </div>
-                    {lastMsg && (
+                    {lastMessage && (
                       <p className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>
-                        {lastMsg.direction === 'outbound' ? '→ ' : ''}{lastMsg.content || '(template)'}
+                        {lastMessage.direction === 'outbound' ? '→ ' : ''}
+                        {lastMessage.content || '(mensagem de template)'}
                       </p>
                     )}
-                    {conv.unread_count > 0 && (
-                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold mt-1"
-                        style={{ background: 'var(--brand-red)', color: 'white' }}>
-                        {conv.unread_count}
-                      </span>
-                    )}
+                    <div className="mt-1 flex items-center gap-2">
+                      {conversation.assigned_to?.full_name && (
+                        <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                          {conversation.assigned_to.full_name}
+                        </span>
+                      )}
+                      {conversation.unread_count > 0 && (
+                        <span
+                          className="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold"
+                          style={{ background: 'var(--brand-red)', color: 'white' }}>
+                          {conversation.unread_count}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </button>
@@ -201,45 +496,62 @@ export default function AtendimentoClient({ conversations }: { conversations: Co
           {filtered.length === 0 && (
             <div className="text-center py-12">
               <MessageSquare size={28} className="mx-auto mb-2" style={{ color: 'var(--text-muted)' }} />
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Nenhuma conversa</p>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                Nenhuma conversa
+              </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Chat area */}
       {selected ? (
         <div className="flex-1 flex flex-col">
-          {/* Chat header */}
-          <div className="flex items-center gap-3 px-5 py-3 border-b" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-secondary)' }}>
+          <div
+            className="flex items-center gap-3 px-5 py-3 border-b"
+            style={{ borderColor: 'var(--border-color)', background: 'var(--bg-secondary)' }}>
             <div className="avatar w-9 h-9 text-sm">
-              {(selected.customer?.name || selected.phone)?.charAt(0).toUpperCase()}
+              {getConversationPreview(selected).charAt(0).toUpperCase()}
             </div>
             <div>
-              <p className="font-semibold text-white text-sm">
-                {selected.customer?.name || formatPhone(selected.phone)}
-              </p>
+              <p className="font-semibold text-white text-sm">{getConversationPreview(selected)}</p>
               <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                 {formatPhone(selected.phone)}
               </p>
             </div>
             <div className="ml-auto flex items-center gap-2">
-              {selected.assigned_to && (
-                <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                  <User size={13} />
-                  {selected.assigned_to.full_name}
-                </div>
-              )}
+              <select
+                className="select"
+                style={{ width: '220px' }}
+                disabled={assigning}
+                value={selected.assigned_to?.id || ''}
+                onChange={event => void handleAssignConversation(event.target.value)}>
+                <option value="">Sem responsável</option>
+                {assignees.map(assignee => (
+                  <option key={assignee.id} value={assignee.id}>
+                    {assignee.full_name || assignee.user_role}
+                  </option>
+                ))}
+              </select>
               <span className={`badge ${selected.status === 'resolvido' ? 'badge-green' : 'badge-yellow'}`}>
                 {selected.status}
               </span>
             </div>
           </div>
 
-          {/* Messages */}
+          {(selected.assigned_to?.full_name || assignmentError) && (
+            <div
+              className="px-5 py-2 text-xs border-b flex items-center gap-2"
+              style={{ borderColor: 'var(--border-color)', color: assignmentError ? '#f87171' : 'var(--text-secondary)' }}>
+              {!assignmentError && <User size={13} />}
+              {assignmentError || `Responsável atual: ${selected.assigned_to?.full_name || 'Não atribuído'}`}
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-3">
-            {messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
+            {messages.map((msg, index) => (
+              <div
+                key={`${msg.direction}-${msg.created_at}-${index}`}
+                className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
                 <div>
                   <div className={msg.direction === 'outbound' ? 'chat-bubble-outbound' : 'chat-bubble-inbound'}>
                     {msg.content || '(mensagem de template)'}
@@ -258,39 +570,57 @@ export default function AtendimentoClient({ conversations }: { conversations: Co
               <div className="flex-1 flex items-center justify-center">
                 <div className="text-center">
                   <MessageSquare size={40} className="mx-auto mb-3" style={{ color: 'var(--text-muted)' }} />
-                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Nenhuma mensagem ainda</p>
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    Nenhuma mensagem ainda
+                  </p>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Input */}
-          <div className="p-4 border-t" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-secondary)' }}>
+          <div className="p-4 border-t space-y-3" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-secondary)' }}>
+            {quickReplies.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {quickReplies.map(reply => (
+                  <button
+                    key={reply.id}
+                    type="button"
+                    className="btn-secondary btn-sm"
+                    onClick={() => applyQuickReply(reply.content)}>
+                    <Sparkles size={13} />
+                    {reply.shortcut}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-center gap-3">
               <input
                 type="text"
                 className="input flex-1"
                 placeholder="Digite uma mensagem... (apenas dentro da janela de 24h)"
                 value={message}
-                onChange={e => setMessage(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
+                onChange={event => setMessage(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
                     void handleSendMessage()
                   }
                 }}
               />
-              <button className="btn-primary p-2.5" disabled={!message.trim() || sending} onClick={() => void handleSendMessage()}>
+              <button
+                className="btn-primary p-2.5"
+                disabled={!message.trim() || sending}
+                onClick={() => void handleSendMessage()}>
                 {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
               </button>
             </div>
-            {sendError && (
-              <p className="text-xs mt-2 text-red-400">
-                {sendError}
-              </p>
-            )}
-            <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
-              ⚠️ Mensagens livres só podem ser enviadas dentro da janela de 24h após última interação do cliente
+
+            {sendError && <p className="text-xs text-red-400">{sendError}</p>}
+
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              ⚠️ Mensagens livres só podem ser enviadas dentro da janela de 24h após a última interação do cliente.
+              Fora da janela, use template aprovado da Meta para iniciar ou retomar a conversa.
             </p>
           </div>
         </div>
@@ -298,7 +628,9 @@ export default function AtendimentoClient({ conversations }: { conversations: Co
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <MessageSquare size={48} className="mx-auto mb-3" style={{ color: 'var(--text-muted)' }} />
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Selecione uma conversa</p>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+              Selecione uma conversa
+            </p>
           </div>
         </div>
       )}
