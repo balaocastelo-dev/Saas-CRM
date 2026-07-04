@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   email TEXT NOT NULL,
   full_name TEXT,
   avatar_url TEXT,
-  role TEXT NOT NULL DEFAULT 'atendente' CHECK (role IN ('admin', 'vendedor', 'atendente', 'tecnico')),
+  user_role TEXT NOT NULL DEFAULT 'atendente' CHECK (user_role IN ('admin', 'vendedor', 'atendente', 'tecnico')),
   is_active BOOLEAN NOT NULL DEFAULT true,
   phone TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -22,16 +22,26 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "profiles_select_own" ON public.profiles
-  FOR SELECT USING (auth.uid() = id);
+-- Função SECURITY DEFINER para checar admin sem recursão
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND user_role = 'admin'
+  );
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
 
+-- Permite ver seu próprio perfil
+CREATE POLICY "profiles_select_own" ON public.profiles
+  FOR SELECT USING (auth.uid() = id OR public.is_admin());
+
+-- Permite atualizar seu próprio perfil
 CREATE POLICY "profiles_update_own" ON public.profiles
   FOR UPDATE USING (auth.uid() = id);
 
+-- Admin pode fazer tudo (sem recursão via SECURITY DEFINER)
 CREATE POLICY "profiles_admin_all" ON public.profiles
-  FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-  );
+  FOR ALL USING (public.is_admin());
 
 -- Trigger para criar profile ao cadastrar usuário
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -432,7 +442,7 @@ CREATE TABLE IF NOT EXISTS public.settings (
 
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "settings_admin_only" ON public.settings FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+  public.is_admin()
 );
 
 -- Configurações padrão
@@ -478,7 +488,7 @@ CREATE INDEX idx_audit_logs_created ON public.audit_logs(created_at DESC);
 
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "audit_logs_admin_read" ON public.audit_logs FOR SELECT USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+  public.is_admin()
 );
 CREATE POLICY "audit_logs_insert_authenticated" ON public.audit_logs FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 
