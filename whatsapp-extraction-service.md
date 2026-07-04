@@ -18,6 +18,12 @@ No CRM hospedado:
 - `WHATSAPP_EXTRACTION_SERVICE_URL` - URL publica do servico local, por exemplo `https://seu-tunnel.exemplo.com`
 - `WHATSAPP_EXTRACTION_SERVICE_TOKEN` - mesmo token configurado no servico local
 
+No navegador do CRM hospedado:
+
+- Tambem e possivel informar a URL publica e o token diretamente na tela `/clientes/extracao`
+- Esses valores ficam salvos no `localStorage` do navegador atual
+- Esse modo evita depender de variaveis de ambiente da Vercel para gerar o QR Code
+
 ## Subir no Windows
 
 ```bat
@@ -45,3 +51,8 @@ npm run whatsapp-extraction-service
 3. Configurar `WHATSAPP_EXTRACTION_SERVICE_URL` e `WHATSAPP_EXTRACTION_SERVICE_TOKEN` no CRM
 4. Abrir `/clientes/extracao`
 5. Gerar QR Code e sincronizar
+
+## CORS
+
+O servico local agora responde com CORS liberado para `GET`, `POST`, `DELETE` e `OPTIONS`, para que a tela hospedada
+consiga falar diretamente com o tunnel HTTPS a partir do navegador.

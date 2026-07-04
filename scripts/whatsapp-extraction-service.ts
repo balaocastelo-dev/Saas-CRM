@@ -16,6 +16,9 @@ function sendJson(
   response.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
+    'access-control-allow-origin': '*',
+    'access-control-allow-headers': 'authorization, content-type',
+    'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
   })
   response.end(JSON.stringify(payload))
 }
@@ -30,6 +33,17 @@ function isAuthorized(request: http.IncomingMessage) {
 }
 
 async function handleRequest(request: http.IncomingMessage, response: http.ServerResponse) {
+  if ((request.method || 'GET') === 'OPTIONS') {
+    response.writeHead(204, {
+      'access-control-allow-origin': '*',
+      'access-control-allow-headers': 'authorization, content-type',
+      'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
+      'cache-control': 'no-store',
+    })
+    response.end()
+    return
+  }
+
   if (!isAuthorized(request)) {
     sendJson(response, 401, { error: 'Token do serviço local inválido.' })
     return

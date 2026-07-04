@@ -39,6 +39,10 @@ function normalizeText(value: string) {
     .toLowerCase()
 }
 
+function normalizeServiceBaseUrl(value: string) {
+  return value.trim().replace(/\/+$/, '')
+}
+
 function downloadBlob(content: BlobPart, type: string, filename: string) {
   const blob = new Blob([content], { type })
   const url = URL.createObjectURL(blob)
@@ -188,10 +192,37 @@ export default function ContactExtractionClient({ initialContacts }: ContactExtr
   const [session, setSession] = useState<WhatsAppExtractionSnapshot | null>(null)
   const [sessionLoading, setSessionLoading] = useState(true)
   const [sessionAction, setSessionAction] = useState<'start' | 'sync' | 'logout' | null>(null)
+  const [directServiceUrl, setDirectServiceUrl] = useState('')
+  const [directServiceToken, setDirectServiceToken] = useState('')
 
-  const refreshSession = useCallback(async () => {
-    try {
-      const response = await fetch('/api/clientes/extracao/whatsapp/session', {
+  const directRemoteEnabled = Boolean(normalizeServiceBaseUrl(directServiceUrl))
+
+  const requestSession = useCallback(
+    async (path: string, init?: RequestInit) => {
+      if (directRemoteEnabled) {
+        const headers = new Headers(init?.headers)
+        headers.set('content-type', 'application/json')
+
+        if (directServiceToken.trim()) {
+          headers.set('authorization', `Bearer ${directServiceToken.trim()}`)
+        }
+
+        const response = await fetch(`${normalizeServiceBaseUrl(directServiceUrl)}${path}`, {
+          ...init,
+          headers,
+          cache: 'no-store',
+        })
+        const payload = await response.json()
+
+        if (!response.ok) {
+          throw new Error(payload.error || 'Falha ao consultar o serviço local do WhatsApp Web.')
+        }
+
+        return payload as WhatsAppExtractionSnapshot
+      }
+
+      const response = await fetch(path, {
+        ...init,
         cache: 'no-store',
       })
       const payload = await response.json()
@@ -200,6 +231,25 @@ export default function ContactExtractionClient({ initialContacts }: ContactExtr
         throw new Error(payload.error || 'Falha ao consultar a sessão do WhatsApp Web.')
       }
 
+      return payload as WhatsAppExtractionSnapshot
+    },
+    [directRemoteEnabled, directServiceToken, directServiceUrl]
+  )
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    setDirectServiceUrl(window.localStorage.getItem('whatsappExtractionServiceUrl') || '')
+    setDirectServiceToken(window.localStorage.getItem('whatsappExtractionServiceToken') || '')
+  }, [])
+
+  const refreshSession = useCallback(async () => {
+    try {
+      const payload = await requestSession(
+        directRemoteEnabled ? '/session' : '/api/clientes/extracao/whatsapp/session'
+      )
       setSession(payload)
       setRemoteError('')
     } catch (error) {
@@ -207,7 +257,7 @@ export default function ContactExtractionClient({ initialContacts }: ContactExtr
     } finally {
       setSessionLoading(false)
     }
-  }, [])
+  }, [directRemoteEnabled, requestSession])
 
   useEffect(() => {
     void refreshSession()
@@ -255,6 +305,7 @@ export default function ContactExtractionClient({ initialContacts }: ContactExtr
   const filenameBase = source === 'crm' ? 'contatos-crm' : 'contatos-whatsapp-web'
   const serviceLabel = session?.serviceLabel || 'Servidor Node local'
   const isRemoteService = session?.serviceMode === 'remote'
+  const needsDirectServiceConfig = session?.status === 'unsupported' && !directRemoteEnabled
 
   async function handleSessionAction(
     action: 'start' | 'sync' | 'logout',
@@ -264,19 +315,42 @@ export default function ContactExtractionClient({ initialContacts }: ContactExtr
     try {
       setSessionAction(action)
       setRemoteError('')
-      const response = await fetch(path, { method })
-      const payload = await response.json()
-
-      if (!response.ok) {
-        throw new Error(payload.error || 'Falha ao executar a ação.')
-      }
-
+      const payload = await requestSession(path, { method })
       setSession(payload)
     } catch (error) {
       setRemoteError(error instanceof Error ? error.message : 'Falha ao executar a ação.')
     } finally {
       setSessionAction(null)
     }
+  }
+
+  function saveDirectServiceConfig() {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const normalizedUrl = normalizeServiceBaseUrl(directServiceUrl)
+
+    if (normalizedUrl) {
+      window.localStorage.setItem('whatsappExtractionServiceUrl', normalizedUrl)
+    } else {
+      window.localStorage.removeItem('whatsappExtractionServiceUrl')
+    }
+
+    if (directServiceToken.trim()) {
+      window.localStorage.setItem('whatsappExtractionServiceToken', directServiceToken.trim())
+    } else {
+      window.localStorage.removeItem('whatsappExtractionServiceToken')
+    }
+
+    setFormatError('')
+    setFormatMessage(
+      normalizedUrl
+        ? 'Serviço local salvo neste navegador. A tela passará a consultar essa URL.'
+        : 'Configuração local removida. A tela voltou a usar o backend padrão do CRM.'
+    )
+    setSessionLoading(true)
+    void refreshSession()
   }
 
   function runExport(action: () => void, successLabel: string) {
@@ -358,14 +432,58 @@ export default function ContactExtractionClient({ initialContacts }: ContactExtr
             Serviço ativo: <strong>{serviceLabel}</strong>
           </div>
 
+          <div className="grid gap-3 lg:grid-cols-[1.6fr,1fr,auto]">
+            <label className="space-y-2">
+              <span className="text-xs uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                URL pública do serviço local
+              </span>
+              <input
+                type="url"
+                value={directServiceUrl}
+                onChange={event => setDirectServiceUrl(event.target.value)}
+                className="search-input w-full"
+                placeholder="https://seu-tunnel.exemplo.com"
+              />
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-xs uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                Token do serviço
+              </span>
+              <input
+                type="password"
+                value={directServiceToken}
+                onChange={event => setDirectServiceToken(event.target.value)}
+                className="search-input w-full"
+                placeholder="Opcional"
+              />
+            </label>
+
+            <div className="flex items-end">
+              <button type="button" className="btn-secondary" onClick={saveDirectServiceConfig}>
+                Salvar acesso
+              </button>
+            </div>
+          </div>
+
+          <p className="text-xs -mt-1" style={{ color: 'var(--text-muted)' }}>
+            Use um tunnel HTTPS apontando para o serviço Windows local. Quando essa URL estiver salva, a tela consulta
+            o serviço diretamente do navegador e não depende do runtime da Vercel.
+          </p>
+
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               className="btn-primary"
-              disabled={sessionAction !== null || session?.status === 'ready' || session?.status === 'syncing'}
+              disabled={
+                sessionAction !== null ||
+                session?.status === 'ready' ||
+                session?.status === 'syncing' ||
+                needsDirectServiceConfig
+              }
               onClick={() => void handleSessionAction(
                 'start',
-                '/api/clientes/extracao/whatsapp/session',
+                directRemoteEnabled ? '/session/start' : '/api/clientes/extracao/whatsapp/session',
                 'POST'
               )}>
               <QrCode size={15} />
@@ -382,7 +500,7 @@ export default function ContactExtractionClient({ initialContacts }: ContactExtr
               }
               onClick={() => void handleSessionAction(
                 'sync',
-                '/api/clientes/extracao/whatsapp/sync',
+                directRemoteEnabled ? '/sync' : '/api/clientes/extracao/whatsapp/sync',
                 'POST'
               )}>
               <RefreshCw size={15} />
@@ -397,7 +515,7 @@ export default function ContactExtractionClient({ initialContacts }: ContactExtr
               disabled={sessionAction !== null || (!session?.isConnected && session?.status !== 'qr')}
               onClick={() => void handleSessionAction(
                 'logout',
-                '/api/clientes/extracao/whatsapp/session',
+                directRemoteEnabled ? '/session' : '/api/clientes/extracao/whatsapp/session',
                 'DELETE'
               )}>
               <Power size={15} />
@@ -418,6 +536,19 @@ export default function ContactExtractionClient({ initialContacts }: ContactExtr
                 color: remoteError || session?.error ? '#fecaca' : '#bfdbfe',
               }}>
               {remoteError || session?.error || session?.message}
+            </div>
+          )}
+
+          {needsDirectServiceConfig && (
+            <div
+              className="rounded-lg border px-3 py-3 text-sm"
+              style={{
+                borderColor: 'rgba(251,191,36,0.35)',
+                background: 'rgba(120,53,15,0.18)',
+                color: '#fde68a',
+              }}>
+              Para gerar o QR Code a partir do CRM hospedado, preencha acima a URL HTTPS do serviço local Windows e,
+              se estiver usando proteção, o token correspondente.
             </div>
           )}
 
