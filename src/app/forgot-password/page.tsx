@@ -7,6 +7,8 @@ import { createClient } from '@/lib/supabase/client'
 
 type RecoveryMode = 'request' | 'reset'
 
+export const dynamic = 'force-dynamic'
+
 function getRedirectTo() {
   if (typeof window === 'undefined') return undefined
   return `${window.location.origin}/forgot-password`
