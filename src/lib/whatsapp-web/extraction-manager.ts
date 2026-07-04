@@ -45,8 +45,13 @@ const CONTACTS_FILE = path.join(EXTRACTION_ROOT, 'contacts.json')
 const AUTH_DIR = path.join(EXTRACTION_ROOT, 'auth')
 const CACHE_DIR = path.join(EXTRACTION_ROOT, '.wwebjs_cache')
 const CLIENT_ID = 'crm-contact-extraction'
+const CAN_USE_LOCAL_FILESYSTEM = !process.env.VERCEL
 
 function ensureExtractionDirs() {
+  if (!CAN_USE_LOCAL_FILESYSTEM) {
+    return
+  }
+
   fs.mkdirSync(EXTRACTION_ROOT, { recursive: true })
   fs.mkdirSync(AUTH_DIR, { recursive: true })
   fs.mkdirSync(CACHE_DIR, { recursive: true })
@@ -83,6 +88,10 @@ function readJsonFile<T>(filePath: string, fallback: T): T {
 }
 
 function writeJsonFile(filePath: string, payload: unknown) {
+  if (!CAN_USE_LOCAL_FILESYSTEM) {
+    return
+  }
+
   ensureExtractionDirs()
   fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8')
 }
@@ -258,13 +267,12 @@ class WhatsAppExtractionManager {
   private snapshot: WhatsAppExtractionSnapshot
 
   constructor() {
-    ensureExtractionDirs()
-
-    const persistedSnapshot = readJsonFile<WhatsAppExtractionSnapshot>(
-      SNAPSHOT_FILE,
-      createInitialSnapshot()
-    )
-    const persistedContacts = readJsonFile<ExtractedWhatsAppContact[]>(CONTACTS_FILE, [])
+    const persistedSnapshot = CAN_USE_LOCAL_FILESYSTEM
+      ? readJsonFile<WhatsAppExtractionSnapshot>(SNAPSHOT_FILE, createInitialSnapshot())
+      : createInitialSnapshot()
+    const persistedContacts = CAN_USE_LOCAL_FILESYSTEM
+      ? readJsonFile<ExtractedWhatsAppContact[]>(CONTACTS_FILE, [])
+      : []
 
     this.snapshot = {
       ...createInitialSnapshot(),
@@ -285,6 +293,10 @@ class WhatsAppExtractionManager {
   }
 
   private persistSnapshot() {
+    if (!CAN_USE_LOCAL_FILESYSTEM) {
+      return
+    }
+
     writeJsonFile(SNAPSHOT_FILE, { ...this.snapshot, contacts: undefined })
     writeJsonFile(CONTACTS_FILE, this.snapshot.contacts)
   }
@@ -452,9 +464,11 @@ class WhatsAppExtractionManager {
       } catch {}
     }
 
-    try {
-      fs.rmSync(path.join(AUTH_DIR, `session-${CLIENT_ID}`), { recursive: true, force: true })
-    } catch {}
+    if (CAN_USE_LOCAL_FILESYSTEM) {
+      try {
+        fs.rmSync(path.join(AUTH_DIR, `session-${CLIENT_ID}`), { recursive: true, force: true })
+      } catch {}
+    }
 
     this.setSnapshot({
       ...createInitialSnapshot(),
