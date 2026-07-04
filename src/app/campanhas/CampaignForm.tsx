@@ -198,6 +198,18 @@ export default function CampaignForm({
         throw new Error('Selecione um template para a campanha.')
       }
 
+      if (!selectedTemplate) {
+        throw new Error('Template selecionado não encontrado.')
+      }
+
+      if (['scheduled', 'running'].includes(form.status) && selectedTemplate.status !== 'approved') {
+        throw new Error('Somente templates aprovados pela Meta podem ser agendados ou enviados.')
+      }
+
+      if (selectedTemplate.category === 'marketing' && !form.accepted_marketing_only) {
+        throw new Error('Campanhas de marketing exigem consentimento. Ative o filtro de clientes com aceite de marketing.')
+      }
+
       if (form.status === 'scheduled' && !form.scheduled_at) {
         throw new Error('Defina a data de agendamento antes de salvar.')
       }
@@ -465,6 +477,11 @@ export default function CampaignForm({
                 Enviar apenas para clientes com consentimento de marketing
               </span>
             </label>
+            {selectedTemplate?.category === 'marketing' && (
+              <p className="text-xs mt-2" style={{ color: '#fbbf24' }}>
+                Templates de marketing só podem ser usados com destinatários que aceitaram receber campanhas.
+              </p>
+            )}
           </div>
 
           <div className="mt-4">
@@ -561,6 +578,12 @@ export default function CampaignForm({
             <div className="flex items-center justify-between gap-3">
               <span style={{ color: 'var(--text-secondary)' }}>Tags ativas</span>
               <span className="text-white">{form.tag_ids.length}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span style={{ color: 'var(--text-secondary)' }}>Regra Meta</span>
+              <span className="text-right text-white">
+                {selectedTemplate?.status === 'approved' ? 'Template aprovado' : 'Planejamento / rascunho'}
+              </span>
             </div>
           </div>
         </div>

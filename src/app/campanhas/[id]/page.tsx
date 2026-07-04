@@ -5,6 +5,7 @@ import { ArrowLeft, Clock3, Megaphone, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateTime, formatPhone } from '@/lib/utils'
 import CampaignForm from '../CampaignForm'
+import CampaignProcessControls from '../CampaignProcessControls'
 
 export const metadata: Metadata = { title: 'Editar Campanha' }
 
@@ -73,15 +74,29 @@ export default async function CampanhaDetalhePage({
             <p className="page-subtitle">Acompanhe e ajuste o template, o público e o status da campanha</p>
           </div>
         </div>
-
-        {campaign.template_id && (
-          <Link href={`/templates/${campaign.template_id}`} className="btn-secondary">
-            <Megaphone size={15} /> Ver template
-          </Link>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <CampaignProcessControls campaignId={campaign.id} status={campaign.status} />
+          {campaign.template_id && (
+            <Link href={`/templates/${campaign.template_id}`} className="btn-secondary">
+              <Megaphone size={15} /> Ver template
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="page-content">
+        <div
+          className="mb-5 rounded-xl border p-4"
+          style={{ borderColor: 'rgba(59,130,246,0.2)', background: 'rgba(59,130,246,0.07)' }}
+        >
+          <p className="text-sm font-medium" style={{ color: '#93c5fd' }}>
+            Segurança da campanha
+          </p>
+          <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
+            O disparo usa apenas a API oficial da Meta, exige template aprovado e bloqueia destinatários sem consentimento.
+          </p>
+        </div>
+
         <div className="mb-5 grid gap-4 md:grid-cols-3">
           <div className="metric-card">
             <div

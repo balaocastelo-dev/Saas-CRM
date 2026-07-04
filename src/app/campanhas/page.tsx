@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import CampaignProcessControls from './CampaignProcessControls'
 import { Plus, Megaphone, Play, Pause, Clock, CheckCircle, XCircle } from 'lucide-react'
 import Link from 'next/link'
 import type { Metadata } from 'next'
@@ -29,9 +30,12 @@ export default async function CampanhasPage() {
           <h1 className="page-title">Campanhas WhatsApp</h1>
           <p className="page-subtitle">Envie mensagens em massa para seus clientes via API oficial</p>
         </div>
-        <Link href="/campanhas/nova" className="btn-primary">
-          <Plus size={15} /> Nova Campanha
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <CampaignProcessControls />
+          <Link href="/campanhas/nova" className="btn-primary">
+            <Plus size={15} /> Nova Campanha
+          </Link>
+        </div>
       </div>
 
       <div className="page-content">
