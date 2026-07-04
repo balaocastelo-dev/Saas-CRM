@@ -1,10 +1,34 @@
 import { createClient } from '@/lib/supabase/server'
-import { Plus, Search, Upload, Filter, Phone, Tag } from 'lucide-react'
+import { Download, Phone, Plus, Search, Upload } from 'lucide-react'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { formatPhone } from '@/lib/utils'
 
 export const metadata: Metadata = { title: 'Clientes' }
+
+type CustomerTagItem = {
+  tag?: Array<{
+    name?: string | null
+    color?: string | null
+  }> | null
+}
+
+type CustomerTagValue = {
+  name?: string | null
+  color?: string | null
+}
+
+type CustomerListItem = {
+  id: string
+  name: string
+  phone_normalized: string
+  email: string | null
+  city: string | null
+  status: string
+  accepted_marketing: boolean
+  created_at: string
+  customer_tags?: CustomerTagItem[]
+}
 
 export default async function ClientesPage({
   searchParams,
@@ -56,6 +80,10 @@ export default async function ClientesPage({
           <p className="page-subtitle">{count?.toLocaleString('pt-BR') || 0} clientes cadastrados</p>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/clientes/extracao" className="btn-secondary">
+            <Download size={15} />
+            Extração de Contatos
+          </Link>
           <Link href="/clientes/importar" className="btn-secondary">
             <Upload size={15} />
             Importar CSV/Excel
@@ -107,7 +135,10 @@ export default async function ClientesPage({
               </tr>
             </thead>
             <tbody>
-              {customers && customers.length > 0 ? customers.map((customer: any) => (
+              {customers && customers.length > 0 ? (customers as CustomerListItem[]).map((customer) => {
+                const tagItems: CustomerTagValue[] = (customer.customer_tags || []).flatMap(item => item.tag || [])
+
+                return (
                 <tr key={customer.id}>
                   <td>
                     <div className="flex items-center gap-3">
@@ -135,19 +166,19 @@ export default async function ClientesPage({
                   </td>
                   <td>
                     <div className="flex flex-wrap gap-1">
-                      {(customer.customer_tags || []).slice(0, 2).map((ct: any) => (
-                        <span key={ct.tag?.name}
+                      {tagItems.slice(0, 2).map((ct) => (
+                        <span key={`${customer.id}-${ct.name || 'tag'}`}
                           className="badge text-xs"
                           style={{
-                            background: `${ct.tag?.color}20`,
-                            color: ct.tag?.color,
-                            border: `1px solid ${ct.tag?.color}30`
+                            background: `${ct.color || '#6b7280'}20`,
+                            color: ct.color || undefined,
+                            border: `1px solid ${(ct.color || '#6b7280')}30`
                           }}>
-                          {ct.tag?.name}
+                          {ct.name}
                         </span>
                       ))}
-                      {(customer.customer_tags || []).length > 2 && (
-                        <span className="badge badge-gray">+{customer.customer_tags.length - 2}</span>
+                      {tagItems.length > 2 && (
+                        <span className="badge badge-gray">+{tagItems.length - 2}</span>
                       )}
                     </div>
                   </td>
@@ -172,7 +203,8 @@ export default async function ClientesPage({
                     </Link>
                   </td>
                 </tr>
-              )) : (
+                )
+              }) : (
                 <tr>
                   <td colSpan={8}>
                     <div className="text-center py-12">

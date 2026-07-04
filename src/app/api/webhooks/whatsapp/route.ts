@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 type SupabaseAdminClient = ReturnType<typeof import('@/lib/supabase/admin').createAdminClient>
+type SupportedMessageType = 'text' | 'template' | 'image' | 'document' | 'audio' | 'video' | 'interactive'
 
 // OPT-OUT keywords
 const OPT_OUT_KEYWORDS = ['SAIR', 'PARAR', 'CANCELAR', 'STOP', 'DESINSCREVER']
@@ -59,14 +60,36 @@ export async function POST(request: NextRequest) {
     const payload = JSON.parse(body)
     const { messages, statuses } = parseWebhookPayload(payload)
 
+    console.log('[Webhook] Payload recebido', {
+      messages: messages.length,
+      statuses: statuses.length,
+    })
+
     // Process incoming messages
     for (const msg of messages) {
-      await processIncomingMessage(supabaseAdmin, msg)
+      try {
+        await processIncomingMessage(supabaseAdmin, msg)
+      } catch (messageError) {
+        console.error('[Webhook] Falha ao processar inbound', {
+          wamid: msg.id,
+          from: msg.from,
+          type: msg.type,
+          error: messageError instanceof Error ? messageError.message : messageError,
+        })
+      }
     }
 
     // Process status updates
     for (const status of statuses) {
-      await processStatusUpdate(supabaseAdmin, status)
+      try {
+        await processStatusUpdate(supabaseAdmin, status)
+      } catch (statusError) {
+        console.error('[Webhook] Falha ao processar status', {
+          wamid: status.id,
+          status: status.status,
+          error: statusError instanceof Error ? statusError.message : statusError,
+        })
+      }
     }
 
     return NextResponse.json({ status: 'ok' })
@@ -79,8 +102,17 @@ export async function POST(request: NextRequest) {
 async function processIncomingMessage(supabaseAdmin: SupabaseAdminClient, msg: WebhookMessage) {
   const phone = normalizeWhatsAppPhone(msg.from)
   const phoneCandidates = getWhatsAppPhoneCandidates(phone)
-  const text = msg.text?.body?.trim().toUpperCase() || ''
-  const content = msg.text?.body || ''
+  const content = extractInboundContent(msg)
+  const text = content.trim().toUpperCase()
+  const messageType = normalizeInboundMessageType(msg.type)
+
+  console.log('[Webhook] Inbound recebido', {
+    wamid: msg.id,
+    from: phone,
+    originalType: msg.type,
+    storedType: messageType,
+    phoneCandidates,
+  })
 
   // Find or create customer
   const { data: customerMatches } = await supabaseAdmin
@@ -128,28 +160,37 @@ async function processIncomingMessage(supabaseAdmin: SupabaseAdminClient, msg: W
   }
 
   // Save message
-  await supabaseAdmin.from('whatsapp_messages').insert({
-    conversation_id: conversation?.id,
-    wamid: msg.id,
-    direction: 'inbound',
-    message_type: msg.type || 'text',
-    content,
-    status: 'delivered',
-  })
+  const { error: messageInsertError } = await supabaseAdmin
+    .from('whatsapp_messages')
+    .upsert({
+      conversation_id: conversation?.id,
+      wamid: msg.id,
+      direction: 'inbound',
+      message_type: messageType,
+      content,
+      status: 'delivered',
+    }, {
+      onConflict: 'wamid',
+      ignoreDuplicates: true,
+    })
+
+  if (messageInsertError) {
+    throw messageInsertError
+  }
 
   // Handle OPT-OUT
   if (OPT_OUT_KEYWORDS.some(kw => text === kw)) {
     await supabaseAdmin
       .from('customers')
       .update({ accepted_marketing: false, status: 'opt-out' })
-      .eq('phone_normalized', `55${phone}`)
+      .in('phone_normalized', phoneCandidates)
 
     // Log audit
     await supabaseAdmin.from('audit_logs').insert({
       action: 'OPT_OUT',
-      entity: 'customer',
+      entity_type: 'customer',
       entity_id: customer?.id,
-      details: { keyword: text, phone },
+      new_values: { keyword: text, phone },
     })
 
     console.log(`[Webhook] Opt-out processado para ${phone}`)
@@ -200,6 +241,62 @@ async function processIncomingMessage(supabaseAdmin: SupabaseAdminClient, msg: W
       })
     }
   }
+}
+
+function normalizeInboundMessageType(messageType: string | undefined): SupportedMessageType {
+  switch (messageType) {
+    case 'text':
+    case 'template':
+    case 'image':
+    case 'document':
+    case 'audio':
+    case 'video':
+    case 'interactive':
+      return messageType
+    case 'button':
+    case 'reaction':
+      return 'interactive'
+    default:
+      return 'text'
+  }
+}
+
+function extractInboundContent(msg: WebhookMessage): string {
+  if (msg.text?.body) {
+    return msg.text.body
+  }
+
+  const dynamicMessage = msg as WebhookMessage & {
+    button?: { text?: string; payload?: string }
+    interactive?: {
+      button_reply?: { title?: string; id?: string }
+      list_reply?: { title?: string; description?: string; id?: string }
+    }
+    reaction?: { emoji?: string }
+  }
+
+  if (dynamicMessage.button?.text || dynamicMessage.button?.payload) {
+    return dynamicMessage.button.text || dynamicMessage.button.payload || ''
+  }
+
+  if (dynamicMessage.interactive?.button_reply) {
+    return dynamicMessage.interactive.button_reply.title || dynamicMessage.interactive.button_reply.id || ''
+  }
+
+  if (dynamicMessage.interactive?.list_reply) {
+    return (
+      dynamicMessage.interactive.list_reply.title ||
+      dynamicMessage.interactive.list_reply.description ||
+      dynamicMessage.interactive.list_reply.id ||
+      ''
+    )
+  }
+
+  if (dynamicMessage.reaction?.emoji) {
+    return dynamicMessage.reaction.emoji
+  }
+
+  return ''
 }
 
 async function incrementCampaignCounter(
